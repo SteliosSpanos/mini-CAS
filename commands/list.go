@@ -11,7 +11,7 @@ import (
 func List() {
 	repo, err := path.Open(".")
 	if err != nil {
-		fmt.Printf("Not a CAS repository. Run './main init' first")
+		fmt.Printf("Not a CAS repository. Run './cas init' first")
 		os.Exit(1)
 	}
 
