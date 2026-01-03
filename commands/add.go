@@ -14,12 +14,12 @@ import (
 func Add(args []string) {
 	repo, err := path.Open(".")
 	if err != nil {
-		fmt.Println("Not a CAS repository. Run './main init' first")
+		fmt.Println("Not a CAS repository. Run './cas init' first")
 		os.Exit(1)
 	}
 
 	if len(args) != 1 {
-		fmt.Println("Usage: ./main add <object>")
+		fmt.Println("Usage: ./cas add <object>")
 		os.Exit(1)
 	}
 
