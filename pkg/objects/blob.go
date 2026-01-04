@@ -1,7 +1,7 @@
 package objects
 
 import (
-	"crypto/sha1"
+	"crypto/sha256"
 	"fmt"
 )
 
@@ -14,7 +14,7 @@ func NewBlob(data []byte) *Blob {
 }
 
 func Hash(blob Blob) string {
-	hash := sha1.Sum(blob.Data)
+	hash := sha256.Sum256(blob.Data)
 
 	return fmt.Sprintf("%x", hash)
 }
