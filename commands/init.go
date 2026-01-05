@@ -10,7 +10,7 @@ import (
 func Init() {
 	repo, err := path.Init("")
 	if err != nil {
-		fmt.Printf("failed to initialize CAS: %v\n", err)
+		fmt.Fprintf(os.Stderr, "failed to initialize CAS: %v\n", err)
 		os.Exit(1)
 	}
 
