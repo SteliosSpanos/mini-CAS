@@ -1,4 +1,4 @@
-# Mini-CAS
+# Mini Content-Addressable-Storage
 
 A content-addressable storage (CAS) system inspired by CVMFS. Mini-CAS stores files by their SHA-256 hash rather than their original path, enabling automatic deduplication and efficient storage management.
 
