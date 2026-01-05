@@ -11,20 +11,20 @@ import (
 func List() {
 	repo, err := path.Open(".")
 	if err != nil {
-		fmt.Println("Not a CAS repository. Run './cas init' first")
+		fmt.Fprintf(os.Stderr, "Not a CAS repository. Run './cas init' first: %v\n", err)
 		os.Exit(1)
 	}
 
 	cat := catalog.NewCatalog(repo.RootDir)
 	if err := cat.Load(); err != nil {
-		fmt.Printf("Failed to load catalog: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Failed to load catalog: %v\n", err)
 		os.Exit(1)
 	}
 
 	entries := cat.ListEntries()
 
 	if len(entries) == 0 {
-		fmt.Println("No files tracked in catalog")
+		fmt.Fprintf(os.Stderr, "No files tracked in catalog\n")
 		os.Exit(1)
 	}
 
