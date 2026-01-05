@@ -28,6 +28,7 @@ func Add(args []string) {
 	cat := catalog.NewCatalog(repo.RootDir)
 	if err := cat.Load(); err != nil {
 		fmt.Printf("Failed to load catalog: %v\n", err)
+		os.Exit(1)
 	}
 
 	info, err := os.Stat(targetPath)
