@@ -12,12 +12,12 @@ import (
 func Cat(args []string) {
 	repo, err := path.Open(".")
 	if err != nil {
-		fmt.Println("Not a CAS repository. Run './cas init' first")
+		fmt.Fprintf(os.Stderr, "Not a CAS repository. Run './cas init' first: %v\n", err)
 		os.Exit(1)
 	}
 
 	if len(args) != 1 {
-		fmt.Println("Usage: ./cas cat <filepath>")
+		fmt.Fprintf(os.Stderr, "Usage: ./cas cat <filepath>\n")
 		os.Exit(1)
 	}
 
@@ -25,30 +25,19 @@ func Cat(args []string) {
 
 	cat := catalog.NewCatalog(repo.RootDir)
 	if err := cat.Load(); err != nil {
-		fmt.Printf("Failed to load catalog: %v\n", err)
-		os.Exit(1)
-	}
-
-	info, err := os.Stat(filePath)
-	if err != nil {
-		fmt.Printf("Failed to access: %v\n", err)
-		os.Exit(1)
-	}
-
-	if info.IsDir() {
-		fmt.Println("Path should be a file")
+		fmt.Fprintf(os.Stderr, "Failed to load catalog: %v\n", err)
 		os.Exit(1)
 	}
 
 	entry, err := cat.GetEntry(filePath)
 	if err != nil {
-		fmt.Printf("This file doesn't exist in the catalog: %v\n", err)
+		fmt.Fprintf(os.Stderr, "This file doesn't exist in the catalog: %v\n", err)
 		os.Exit(1)
 	}
 
 	data, err := storage.ReadBlob(repo.RootDir, entry.Hash)
 	if err != nil {
-		fmt.Printf("Failed to read blob from storage: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Failed to read blob from storage: %v\n", err)
 		os.Exit(1)
 	}
 
