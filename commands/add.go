@@ -14,12 +14,12 @@ import (
 func Add(args []string) {
 	repo, err := path.Open(".")
 	if err != nil {
-		fmt.Println("Not a CAS repository. Run './cas init' first")
+		fmt.Fprintf(os.Stderr, "Not a CAS repository. Run './cas init' first: %v\n", err)
 		os.Exit(1)
 	}
 
 	if len(args) != 1 {
-		fmt.Println("Usage: ./cas add <object>")
+		fmt.Fprintf(os.Stderr, "Usage: ./cas add <object>\n")
 		os.Exit(1)
 	}
 
@@ -27,30 +27,30 @@ func Add(args []string) {
 
 	cat := catalog.NewCatalog(repo.RootDir)
 	if err := cat.Load(); err != nil {
-		fmt.Printf("Failed to load catalog: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Failed to load catalog: %v\n", err)
 		os.Exit(1)
 	}
 
 	info, err := os.Stat(targetPath)
 	if err != nil {
-		fmt.Printf("Failed to access %s: %v\n", targetPath, err)
+		fmt.Fprintf(os.Stderr, "Failed to access %s: %v\n", targetPath, err)
 		os.Exit(1)
 	}
 
 	if info.IsDir() {
 		if err := addDirectory(repo.RootDir, targetPath, cat); err != nil {
-			fmt.Printf("Failed to add directory: %v\n", err)
+			fmt.Fprintf(os.Stderr, "Failed to add directory: %v\n", err)
 			os.Exit(1)
 		}
 	} else {
 		if err := addFile(repo.RootDir, targetPath, cat); err != nil {
-			fmt.Printf("Failed to add file: %v\n", err)
+			fmt.Fprintf(os.Stderr, "Failed to add file: %v\n", err)
 			os.Exit(1)
 		}
 	}
 
 	if err := cat.Save(); err != nil {
-		fmt.Printf("Failed to save catalog: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Failed to save catalog: %v\n", err)
 		os.Exit(1)
 	}
 
