@@ -6,6 +6,7 @@ import (
 
 	"github.com/SteliosSpanos/mini-CAS/pkg/catalog"
 	"github.com/SteliosSpanos/mini-CAS/pkg/path"
+	"github.com/SteliosSpanos/mini-CAS/pkg/storage"
 )
 
 func Cat(args []string) {
@@ -45,9 +46,11 @@ func Cat(args []string) {
 		os.Exit(1)
 	}
 
-	hashShort := entry.Hash[:8]
-	sizeStr := formatSize(entry.Filesize)
-	modTime := entry.ModTime.Format("2006-01-02 15:04")
+	data, err := storage.ReadBlob(repo.RootDir, entry.Hash)
+	if err != nil {
+		fmt.Printf("Failed to read blob from storage: %v\n", err)
+		os.Exit(1)
+	}
 
-	fmt.Printf("%-50s %-10s %-12s %s\n", entry.Filepath, hashShort, sizeStr, modTime)
+	os.Stdout.Write(data)
 }
