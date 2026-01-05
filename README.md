@@ -56,6 +56,14 @@ When adding directories, Mini-CAS automatically skips the `.cas/` directory to a
 
 This displays all files tracked in the catalog with their hash, size, and modification time.
 
+### Retrieve file contents
+
+```bash
+./cas cat <filepath>
+```
+
+Retrieves and displays the content of a file from storage. The file must be tracked in the catalog.
+
 ## Architecture
 
 Mini-CAS is built with a layered architecture:
