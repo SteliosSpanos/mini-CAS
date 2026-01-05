@@ -13,7 +13,7 @@ func main() {
 		fmt.Println("    init    Initialize CAS")
 		fmt.Println("    add     Add file or directory in the storage")
 		fmt.Println("    ls      List all the contents")
-		fmt.Println("    cat     Show a specific file from the catalog")
+		fmt.Println("    cat     Show a specific file from the storage")
 		os.Exit(1)
 	}
 
