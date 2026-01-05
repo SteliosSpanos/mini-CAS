@@ -13,6 +13,7 @@ func main() {
 		fmt.Println("    init    Initialize CAS")
 		fmt.Println("    add     Add file or directory in the storage")
 		fmt.Println("    ls      List all the contents")
+		fmt.Println("    cat     Show ")
 		os.Exit(1)
 	}
 
@@ -26,6 +27,8 @@ func main() {
 		commands.Add(args)
 	case "ls":
 		commands.List()
+	case "cat":
+		commands.Cat(args)
 	default:
 		fmt.Println("Not a valid command")
 		os.Exit(1)
