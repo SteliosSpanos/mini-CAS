@@ -33,7 +33,7 @@ func List() {
 
 	for _, entry := range entries {
 		hashShort := entry.Hash[:8]
-		sizeStr := formatSize(entry.Filesize)
+		sizeStr := catalog.FormatSize(entry.Filesize)
 		modTime := entry.ModTime.Format("2006-01-02 15:04")
 
 		fmt.Printf("%-50s %-10s %-12s  %s\n", entry.Filepath, hashShort, sizeStr, modTime)
