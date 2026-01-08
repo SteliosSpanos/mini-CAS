@@ -10,10 +10,11 @@ import (
 func main() {
 	if len(os.Args) < 2 {
 		fmt.Println("Usage: ./cas <command> [arguments]")
-		fmt.Println("    init    Initialize CAS")
-		fmt.Println("    add     Add file or directory in the storage")
-		fmt.Println("    ls      List all the contents")
-		fmt.Println("    cat     Show a specific file from the storage")
+		fmt.Println("    init     Initialize CAS")
+		fmt.Println("    add      Add file or directory in the storage")
+		fmt.Println("    ls       List all the contents")
+		fmt.Println("    cat      Show a specific file from the storage")
+		fmt.Println("    status   Show CAS status and analytics")
 		os.Exit(1)
 	}
 
