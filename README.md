@@ -64,6 +64,14 @@ This displays all files tracked in the catalog with their hash, size, and modifi
 
 Retrieves and displays the content of a file from storage. The file must be tracked in the catalog.
 
+### View repository statistics
+
+```bash
+./cas status
+```
+
+Displays repository statistics including total files tracked, unique blobs stored, storage space used, and deduplication savings.
+
 ## Architecture
 
 Mini-CAS is built with a layered architecture:
