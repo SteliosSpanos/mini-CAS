@@ -30,6 +30,8 @@ func main() {
 		commands.List()
 	case "cat":
 		commands.Cat(args)
+	case "status":
+		commands.Status()
 	default:
 		fmt.Println("Not a valid command")
 		os.Exit(1)
