@@ -94,3 +94,17 @@ func WriteBlobStream(casDir string, reader io.Reader) (string, error) {
 
 	return hash, nil
 }
+
+func OpenBlob(casDir, hash string) (*os.File, error) {
+	objectPath := filepath.Join(casDir, "storage", hash[:2], hash[2:4], hash)
+
+	file, err := os.Open(objectPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, fmt.Errorf("blob not found: %s", hash)
+		}
+		return nil, fmt.Errorf("failed to open blob: %w", err)
+	}
+
+	return file, nil
+}
