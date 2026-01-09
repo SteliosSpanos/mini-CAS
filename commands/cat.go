@@ -2,6 +2,7 @@ package commands
 
 import (
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/SteliosSpanos/mini-CAS/pkg/catalog"
@@ -35,11 +36,12 @@ func Cat(args []string) {
 		os.Exit(1)
 	}
 
-	data, err := storage.ReadBlob(repo.RootDir, entry.Hash)
+	file, err := storage.OpenBlob(repo.RootDir, entry.Hash)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to read blob from storage: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Failed to open blob: %v\n", err)
 		os.Exit(1)
 	}
+	defer file.Close()
 
-	os.Stdout.Write(data)
+	io.Copy(os.Stdout, file)
 }
