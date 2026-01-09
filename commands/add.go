@@ -1,14 +1,13 @@
 package commands
 
 import (
-	"crypto/sha256"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 
 	"github.com/SteliosSpanos/mini-CAS/pkg/catalog"
 	"github.com/SteliosSpanos/mini-CAS/pkg/path"
+	"github.com/SteliosSpanos/mini-CAS/pkg/storage"
 )
 
 func Add(args []string) {
@@ -82,48 +81,14 @@ func addFile(casDir, filePath string, cat *catalog.Catalog) error {
 	}
 	defer file.Close()
 
-	info, err := os.Stat(filePath)
+	info, err := file.Stat()
 	if err != nil {
 		return fmt.Errorf("failed to stat file: %v\n", err)
 	}
 
-	tmpFile, err := os.CreateTemp(filepath.Join(casDir, "storage"), "tmp-")
+	hash, err := storage.WriteBlobStream(casDir, file)
 	if err != nil {
-		return fmt.Errorf("failed to create temp file: %w", err)
-	}
-	tmpPath := tmpFile.Name()
-	defer os.Remove(tmpPath)
-	defer tmpFile.Close()
-
-	hasher := sha256.New()
-	multiWriter := io.MultiWriter(tmpFile, hasher)
-
-	if _, err := io.Copy(multiWriter, file); err != nil {
-		return fmt.Errorf("failed to copy file: %w", err)
-	}
-
-	hash := fmt.Sprintf("%x", hasher.Sum(nil))
-
-	tmpFile.Close()
-
-	objectDir := filepath.Join(casDir, "storage", hash[:2], hash[2:4])
-	objectPath := filepath.Join(objectDir, hash)
-
-	if _, err := os.Stat(objectPath); err == nil {
-		return nil
-	}
-
-	if err := os.MkdirAll(objectDir, 0755); err != nil {
-		return fmt.Errorf("failed to create directory: %w", err)
-	}
-
-	// Rename is atomic so we only get the final file
-	if err := os.Rename(tmpPath, objectPath); err != nil {
-		return fmt.Errorf("failed to move file: %w", err)
-	}
-
-	if err := os.Chmod(objectPath, 0444); err != nil {
-		return fmt.Errorf("failed to set permissions: %w", err)
+		return fmt.Errorf("failed to write blob: %w", err)
 	}
 
 	entry := catalog.Entry{
