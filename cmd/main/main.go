@@ -11,6 +11,7 @@ func main() {
 	if len(os.Args) < 2 {
 		fmt.Println("Usage: ./cas <command> [arguments]")
 		fmt.Println("    init     Initialize CAS")
+		fmt.Println("    hash     Displays the hash of a file for testing (CAS not needed)")
 		fmt.Println("    add      Add file or directory in the storage")
 		fmt.Println("    ls       List all the contents")
 		fmt.Println("    cat      Show a specific file from the storage")
@@ -32,6 +33,8 @@ func main() {
 		commands.Cat(args)
 	case "status":
 		commands.Status()
+	case "hash":
+		commands.HashFile(args)
 	default:
 		fmt.Println("Not a valid command")
 		os.Exit(1)
