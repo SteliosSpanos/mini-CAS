@@ -16,6 +16,7 @@ func main() {
 		fmt.Println("    ls       List all the contents")
 		fmt.Println("    cat      Show a specific file from the storage")
 		fmt.Println("    status   Show CAS status and analytics")
+		fmt.Println("    verify   Verify all the contents of the storage")
 		os.Exit(1)
 	}
 
@@ -35,6 +36,8 @@ func main() {
 		commands.Status()
 	case "hash":
 		commands.HashFile(args)
+	case "verify":
+		commands.Verify()
 	default:
 		fmt.Println("Not a valid command")
 		os.Exit(1)
