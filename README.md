@@ -15,6 +15,7 @@ Content-addressable storage eliminates duplicate files automatically by storing 
 - **Immutable storage**: Blobs are write-once, read-many with enforced permissions
 - **Human-readable catalog**: JSON-based catalog for easy inspection and debugging
 - **Directory support**: Add entire directory trees with a single command
+- **Integrity verification**: Verify stored content against catalog hashes
 
 ## Installation
 
@@ -45,6 +46,9 @@ go build -o cas ./cmd/main
 
 # Retrieve file contents
 ./cas cat myfile.txt
+
+# Verify storage integrity
+./cas verify
 ```
 
 ## Commands
@@ -71,7 +75,7 @@ Add files or directories to the storage.
 ./cas add /path/to/directory
 ```
 
-When adding directories, Mini-CAS automatically skips the `.cas/` directory to avoid recursion. Each file added displays its short hash (first 8 characters).
+When adding directories, Mini-CAS automatically skips the `.cas/` directory to avoid recursion. Each file added displays its short hash (first 8 characters). Files are processed using streaming I/O to handle large files efficiently without loading them entirely into memory.
 
 ### ls
 
@@ -91,7 +95,7 @@ Retrieve and display file contents from storage.
 ./cas cat <filepath>
 ```
 
-Retrieves file content based on the catalog entry. Supports piping to other commands:
+Retrieves file content based on the catalog entry using streaming I/O. Supports piping to other commands:
 
 ```bash
 ./cas cat config.json | jq .
@@ -120,13 +124,28 @@ Compute the SHA-256 hash of any file without adding it to storage.
 
 This is a standalone utility that does not require an initialized CAS repository. Useful for verifying file integrity or pre-checking what hash a file would receive.
 
+### verify
+
+Verify the integrity of all stored content.
+
+```bash
+./cas verify
+```
+
+Iterates through all catalog entries and verifies that each stored blob matches its expected SHA-256 hash. Reports:
+- OK: Files that pass verification
+- MISSING: Files whose blobs are not found in storage
+- CORRUPT: Files whose stored content does not match the expected hash
+
+Exits with code 1 if any issues are detected, making it suitable for scripting and automated integrity checks.
+
 ## Architecture
 
 Mini-CAS is built with a layered architecture:
 
 ```
 +------------------+
-|  Command Layer   |  CLI interface (init, add, ls, cat, status, hash)
+|  Command Layer   |  CLI interface (init, add, ls, cat, status, hash, verify)
 +------------------+
 |  Repository      |  Manages .cas/ directory structure
 +------------------+
@@ -171,7 +190,8 @@ mini-CAS/
 │   ├── list.go         # List tracked files
 │   ├── cat.go          # Retrieve file contents
 │   ├── status.go       # Repository statistics
-│   └── hash.go         # Standalone hash utility
+│   ├── hash.go         # Standalone hash utility
+│   └── verify.go       # Storage integrity verification
 ├── pkg/
 │   ├── objects/        # Blob types and hashing
 │   ├── storage/        # Physical storage management
