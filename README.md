@@ -177,7 +177,6 @@ mini-CAS/
 │   ├── storage/        # Physical storage management
 │   ├── catalog/        # Path-to-hash mapping
 │   └── path/           # Repository initialization
-├── CLAUDE.md           # Development guidance
 └── README.md           # This file
 ```
 
