@@ -11,6 +11,7 @@ Content-addressable storage eliminates duplicate files automatically by storing 
 - **Automatic deduplication**: Identical files are stored only once
 - **Content-based addressing**: Files are stored by their SHA-256 hash
 - **Memory-efficient streaming**: Large files are processed without loading entirely into memory
+- **Interface-based design**: Follows Go best practices using `io.Reader`/`io.Writer` for flexibility and testability
 - **Efficient sharding**: 2-level directory sharding prevents filesystem performance degradation
 - **Immutable storage**: Blobs are write-once, read-many with enforced permissions
 - **Human-readable catalog**: JSON-based catalog for easy inspection and debugging
@@ -203,6 +204,7 @@ mini-CAS/
 ## Design Decisions
 
 - **SHA-256 hashing**: Cryptographically secure hash function with excellent collision resistance
+- **Go interface patterns**: Follows idiomatic Go design by accepting `io.Reader`/`io.Writer` interfaces rather than concrete types, enabling composition, testing without filesystem, and future extensibility
 - **Streaming I/O**: Files are processed using `io.Copy` and `io.MultiWriter` to handle large files without excessive memory usage
 - **Write-time deduplication**: Checks for existing blobs before writing to minimize I/O
 - **Atomic writes**: New blobs are written to a temp file first, then renamed to final location
