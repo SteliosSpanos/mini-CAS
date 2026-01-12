@@ -2,6 +2,7 @@ package server
 
 import (
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"regexp"
@@ -48,13 +49,9 @@ func (s *Server) handleGetBlob(w http.ResponseWriter, r *http.Request) {
 
 		return
 	}
+	defer reader.Close()
 
-	var size int64
-	if file, ok := reader.(*os.File); ok {
-		if stat, err := file.Stat(); err == nil {
-			size = stat.Size()
-		}
-	}
+	size := getSizeFromFile(reader)
 
 	if r.Method == http.MethodHead {
 		w.Header().Set("Content-Type", "application/octet-stream")
@@ -90,16 +87,9 @@ func (s *Server) handleStatBlob(w http.ResponseWriter, r *http.Request) {
 	}
 	defer reader.Close()
 
-	var size int64
-	if file, ok := reader.(*os.File); ok {
-		if stat, err := file.Stat(); err == nil {
-			size = stat.Size()
-		}
-	}
-
 	WriteJSON(w, http.StatusOK, BlobResponse{
 		Hash:   hash,
-		Size:   size,
+		Size:   getSizeFromFile(reader),
 		Exists: true,
 	})
 }
@@ -142,19 +132,22 @@ func (s *Server) handlePostBlob(w http.ResponseWriter, r *http.Request) {
 	}
 	defer reader.Close()
 
+	response := BlobResponse{
+		Hash: hash,
+		Size: getSizeFromFile(reader),
+	}
+
+	WriteJSON(w, http.StatusCreated, response)
+}
+
+func getSizeFromFile(reader io.ReadCloser) int64 {
 	var size int64
 	if file, ok := reader.(*os.File); ok {
 		if stat, err := file.Stat(); err == nil {
 			size = stat.Size()
 		}
 	}
-
-	response := BlobResponse{
-		Hash: hash,
-		Size: size,
-	}
-
-	WriteJSON(w, http.StatusCreated, response)
+	return size
 }
 
 func isValidHash(hash string) bool {
