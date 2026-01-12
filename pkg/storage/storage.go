@@ -95,7 +95,7 @@ func WriteBlobStream(casDir string, reader io.Reader) (string, error) {
 	return hash, nil
 }
 
-func OpenBlob(casDir, hash string) (*os.File, error) {
+func OpenBlob(casDir, hash string) (io.ReadCloser, error) {
 	objectPath := filepath.Join(casDir, "storage", hash[:2], hash[2:4], hash)
 
 	file, err := os.Open(objectPath)
