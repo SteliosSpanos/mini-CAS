@@ -3,6 +3,7 @@ package catalog
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"time"
@@ -53,34 +54,57 @@ func (c *Catalog) ListEntries() []Entry {
 func (c *Catalog) Save() error {
 	catalogPath := filepath.Join(c.casDir, "catalog.json")
 
-	data, err := json.MarshalIndent(c.entries, "", " ")
+	file, err := os.Create(catalogPath)
 	if err != nil {
-		return fmt.Errorf("failed to turn to JSON: %w", err)
+		return fmt.Errorf("failed to create catalog file: %w", err)
 	}
+	defer file.Close()
 
-	if err := os.WriteFile(catalogPath, data, 0644); err != nil {
-		return fmt.Errorf("failed to write JSON to file: %w", err)
-	}
-
-	return nil
+	_, err = c.WriteTo(file)
+	return err
 }
 
 func (c *Catalog) Load() error {
 	catalogPath := filepath.Join(c.casDir, "catalog.json")
 
-	data, err := os.ReadFile(catalogPath)
+	file, err := os.Open(catalogPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil
 		}
-		return fmt.Errorf("failed to load JSON from file: %w", err)
+		return fmt.Errorf("failed to open catalog: %w", err)
+	}
+	defer file.Close()
+
+	_, err = c.ReadFrom(file)
+	return err
+}
+
+func (c *Catalog) WriteTo(w io.Writer) (int64, error) {
+	data, err := json.MarshalIndent(c.entries, "", " ")
+	if err != nil {
+		return 0, fmt.Errorf("failed to marshal catalog: %w", err)
+	}
+
+	n, err := w.Write(data)
+	if err != nil {
+		return 0, fmt.Errorf("failed to write catalog: %w", err)
+	}
+
+	return int64(n), nil
+}
+
+func (c *Catalog) ReadFrom(r io.Reader) (int64, error) {
+	data, err := io.ReadAll(r)
+	if err != nil {
+		return 0, fmt.Errorf("failed to read catalog: %w", err)
 	}
 
 	if err := json.Unmarshal(data, &c.entries); err != nil {
-		return fmt.Errorf("failed to turn JSON to catalog: %w", err)
+		return 0, fmt.Errorf("failed to unmarshal catalog: %w", err)
 	}
 
-	return nil
+	return int64(len(data)), nil
 }
 
 func FormatSize(bytes uint64) string {
