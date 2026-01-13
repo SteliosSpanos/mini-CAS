@@ -87,9 +87,11 @@ func (s *Server) handleStatBlob(w http.ResponseWriter, r *http.Request) {
 	}
 	defer reader.Close()
 
+	size := getSizeFromFile(reader)
+
 	WriteJSON(w, http.StatusOK, BlobResponse{
 		Hash:   hash,
-		Size:   getSizeFromFile(reader),
+		Size:   size,
 		Exists: true,
 	})
 }
@@ -132,9 +134,11 @@ func (s *Server) handlePostBlob(w http.ResponseWriter, r *http.Request) {
 	}
 	defer reader.Close()
 
+	size := getSizeFromFile(reader)
+
 	response := BlobResponse{
 		Hash: hash,
-		Size: getSizeFromFile(reader),
+		Size: size,
 	}
 
 	WriteJSON(w, http.StatusCreated, response)
