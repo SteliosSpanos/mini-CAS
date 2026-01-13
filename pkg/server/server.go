@@ -38,7 +38,7 @@ func NewServer(config Config) (*Server, error) {
 
 	cat := catalog.NewCatalog(repo.RootDir)
 	if err := cat.Load(); err != nil {
-		return nil, fmt.Errorf("failed to load catalog: %w")
+		return nil, fmt.Errorf("failed to load catalog: %w", err)
 	}
 
 	logger := log.New(os.Stdout, "[CAS-SERVER]", log.LstdFlags)
