@@ -11,7 +11,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/SteliosSpanos/mini-CAS/pkg/path"
 	"github.com/SteliosSpanos/mini-CAS/pkg/server"
 )
 
@@ -25,12 +24,6 @@ func Serve(args []string) {
 
 	fs.Parse(args)
 
-	repo, err := path.Open(".")
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Not a CAS repository. Run './cas init' first: %v\n", err)
-		os.Exit(1)
-	}
-
 	config := server.Config{
 		Port:         *port,
 		Host:         *host,
@@ -38,7 +31,7 @@ func Serve(args []string) {
 		CORSOrigins:  parseCORSOrigins(*corsOrigins),
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 30 * time.Second,
-		RepoPath:     repo.RootDir,
+		RepoPath:     ".",
 	}
 
 	srv, err := server.NewServer(config)
