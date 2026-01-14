@@ -17,6 +17,10 @@ Content-addressable storage eliminates duplicate files automatically by storing 
 - **Human-readable catalog**: JSON-based catalog for easy inspection and debugging
 - **Directory support**: Add entire directory trees with a single command
 - **Integrity verification**: Verify stored content against catalog hashes
+- **RESTful HTTP API**: Production-ready HTTP server with streaming endpoints
+- **ETag caching**: Content-based ETags enable perfect HTTP caching
+- **Graceful shutdown**: Handles SIGTERM/SIGINT signals properly
+- **Flexible configuration**: Command-line flags and environment variables support
 
 ## Installation
 
@@ -52,7 +56,7 @@ go build -o cas ./cmd/main
 ./cas verify
 ```
 
-## Commands
+## CLI Commands
 
 ### init
 
@@ -140,29 +144,62 @@ Iterates through all catalog entries and verifies that each stored blob matches 
 
 Exits with code 1 if any issues are detected, making it suitable for scripting and automated integrity checks.
 
+### serve
+
+Start an HTTP API server to access the CAS repository over the network.
+
+```bash
+./cas serve [options]
+```
+
+Options:
+- `--port`: HTTP port (default: 8080, env: CAS_PORT)
+- `--host`: Bind address (default: 0.0.0.0, env: CAS_HOST)
+- `--auth-token`: Bearer token for write operations (optional, env: CAS_AUTH_TOKEN)
+- `--cors-origins`: Comma-separated CORS origins (default: *, env: CAS_CORS_ORIGINS)
+
+Examples:
+
+```bash
+# Start with defaults (port 8080, no auth)
+./cas serve
+
+# Start on custom port with authentication
+./cas serve --port 3000 --auth-token mysecret
+
+# Using environment variables
+export CAS_PORT=8080
+export CAS_AUTH_TOKEN=production-secret-token
+export CAS_CORS_ORIGINS="https://app.example.com,https://cdn.example.com"
+./cas serve
+```
+
+The server runs until interrupted with SIGINT (Ctrl+C) or SIGTERM, performing graceful shutdown with a 30-second timeout.
+
 ## Architecture
 
 Mini-CAS is built with a layered architecture:
 
 ```
-+------------------+
-|  Command Layer   |  CLI interface (init, add, ls, cat, status, hash, verify)
-+------------------+
-|  Repository      |  Manages .cas/ directory structure
-+------------------+
-|  Catalog         |  Maps file paths to content hashes
-+------------------+
-|  Storage         |  Physical blob storage with sharding
-+------------------+
-|  Objects         |  Blob types and SHA-256 hashing
-+------------------+
++------------------+------------------+
+|  Command Layer   |   HTTP Server    |  CLI and REST API interfaces
++------------------+------------------+
+|         Repository Layer            |  Manages .cas/ directory structure
++-------------------------------------+
+|          Catalog Layer              |  Maps file paths to content hashes
++-------------------------------------+
+|          Storage Layer              |  Physical blob storage with sharding
++-------------------------------------+
+|          Objects Layer              |  Blob types and SHA-256 hashing
++-------------------------------------+
 ```
 
 - **Objects Layer**: Defines the `Blob` type and SHA-256 hashing
 - **Storage Layer**: Manages physical blob storage with 2-level sharding and streaming I/O
 - **Catalog Layer**: Maps original file paths to content hashes with JSON persistence
 - **Repository Layer**: Manages the `.cas/` directory structure
-- **Command Layer**: User-facing CLI commands
+- **Command Layer**: User-facing CLI commands (init, add, ls, cat, status, hash, verify, serve)
+- **HTTP Server**: RESTful API with streaming endpoints, middleware chain, and graceful shutdown
 
 ## Storage Structure
 
@@ -179,6 +216,143 @@ Files are stored using a 2-level sharding strategy based on the SHA-256 hash:
 
 This sharding approach (using the first 4 characters of the hash split into two directory levels) scales to millions of files without filesystem performance degradation.
 
+## HTTP API Server
+
+Mini-CAS includes a production-ready HTTP server that exposes the storage system via a RESTful API. The server uses streaming I/O for all blob operations, ensuring constant memory usage regardless of file size.
+
+### API Endpoints
+
+| Endpoint | Method | Auth Required | Description |
+|----------|--------|---------------|-------------|
+| `/health` | GET | No | Health check with repository statistics |
+| `/blob/{hash}` | GET | No | Download blob by hash (streaming) |
+| `/blob/{hash}` | HEAD | No | Check if blob exists (no body) |
+| `/blob/{hash}/stat` | GET | No | Get blob metadata (hash, size, exists) |
+| `/catalog` | GET | No | Get full catalog as JSON |
+| `/catalog?filepath=path` | GET | No | Get single catalog entry by filepath |
+| `/blobs` | POST | Yes | Upload blob (streaming, returns hash) |
+
+### Configuration
+
+The server can be configured via command-line flags or environment variables:
+
+```bash
+# Command-line flags
+./cas serve --port 8080 --host 0.0.0.0 --auth-token secret123 --cors-origins "*"
+
+# Environment variables (12-factor compatible)
+export CAS_PORT=8080
+export CAS_HOST=0.0.0.0
+export CAS_AUTH_TOKEN=secret123
+export CAS_CORS_ORIGINS="https://app.example.com,https://cdn.example.com"
+./cas serve
+```
+
+**Default values:**
+- Port: 8080
+- Host: 0.0.0.0 (all interfaces)
+- Auth Token: none (optional, only required for POST operations)
+- CORS Origins: * (all origins allowed)
+- Read Timeout: 30 seconds
+- Write Timeout: 30 seconds
+
+### Usage Examples
+
+**Health check:**
+```bash
+curl http://localhost:8080/health
+# {"status":"ok","total_files":42,"unique_blobs":28}
+```
+
+**Download a blob:**
+```bash
+curl http://localhost:8080/blob/e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+# (blob content streamed to stdout)
+```
+
+**Check if blob exists (HEAD request):**
+```bash
+curl -I http://localhost:8080/blob/e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+# HTTP/1.1 200 OK
+# Content-Type: application/octet-stream
+# ETag: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+# Cache-Control: public, max-age=31536000, immutable
+```
+
+**Get blob metadata:**
+```bash
+curl http://localhost:8080/blob/e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855/stat
+# {"hash":"e3b0c44...","size":1024,"exists":true}
+```
+
+**Get catalog:**
+```bash
+curl http://localhost:8080/catalog | jq
+# {
+#   "entries": {
+#     "README.md": {
+#       "filepath": "README.md",
+#       "hash": "abc123...",
+#       "filesize": 2048,
+#       "modified": "2024-01-15T10:30:00Z"
+#     }
+#   }
+# }
+```
+
+**Get single catalog entry:**
+```bash
+curl "http://localhost:8080/catalog?filepath=README.md"
+# {"filepath":"README.md","hash":"abc123...","filesize":2048,"modified":"..."}
+```
+
+**Upload a blob:**
+```bash
+curl -X POST http://localhost:8080/blobs \
+  -H "Authorization: Bearer secret123" \
+  -H "Content-Type: application/octet-stream" \
+  --data-binary @file.txt
+# {"hash":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","size":1024}
+```
+
+**Upload from stdin:**
+```bash
+echo "Hello, World!" | curl -X POST http://localhost:8080/blobs \
+  -H "Authorization: Bearer secret123" \
+  --data-binary @-
+# {"hash":"dffd6021bb2bd5b0af676290809ec3a53191dd81c7f70a4b28688a362182986f","size":14}
+```
+
+### API Features
+
+- **Streaming I/O**: All blob operations use streaming, supporting arbitrarily large files with constant memory usage
+- **Content-based ETags**: The blob's SHA-256 hash IS the ETag, enabling perfect HTTP caching
+- **Immutable caching**: Blobs get `Cache-Control: public, max-age=31536000, immutable` headers
+- **Authentication**: Bearer token authentication for write operations (POST), reads are public
+- **CORS support**: Configurable CORS origins for browser-based applications
+- **Graceful shutdown**: Handles SIGTERM/SIGINT with 30-second graceful shutdown timeout
+- **Structured logging**: Request logging with method, path, status code, and duration
+- **Panic recovery**: Recovery middleware catches panics and returns 500 errors
+- **Standard errors**: JSON error responses with consistent structure
+
+### Middleware Chain
+
+The server applies middleware in the following order:
+
+1. **Recovery**: Catches panics and returns 500 errors
+2. **Logging**: Logs all requests with timing information
+3. **CORS**: Handles CORS preflight and headers
+4. **Auth**: Validates Bearer token for write operations (POST)
+
+### Security Considerations
+
+- Authentication is optional but recommended for production deployments
+- Read operations (GET, HEAD) are always public
+- Write operations (POST) require Bearer token authentication if configured
+- CORS can be restricted to specific origins
+- The server does not expose catalog write operations (catalog is updated via CLI only)
+- Blobs are immutable and stored with read-only permissions
+
 ## Project Structure
 
 ```
@@ -192,12 +366,19 @@ mini-CAS/
 │   ├── cat.go          # Retrieve file contents
 │   ├── status.go       # Repository statistics
 │   ├── hash.go         # Standalone hash utility
-│   └── verify.go       # Storage integrity verification
+│   ├── verify.go       # Storage integrity verification
+│   └── serve.go        # HTTP API server command
 ├── pkg/
 │   ├── objects/        # Blob types and hashing
 │   ├── storage/        # Physical storage management
 │   ├── catalog/        # Path-to-hash mapping
-│   └── path/           # Repository initialization
+│   ├── path/           # Repository initialization
+│   └── server/         # HTTP server implementation
+│       ├── server.go   # Server lifecycle and configuration
+│       ├── handlers.go # HTTP request handlers
+│       ├── middleware.go # Logging, CORS, auth, recovery
+│       ├── response.go # JSON response helpers
+│       └── routes.go   # Route registration
 └── README.md           # This file
 ```
 
@@ -210,6 +391,10 @@ mini-CAS/
 - **Atomic writes**: New blobs are written to a temp file first, then renamed to final location
 - **Immutable blobs**: Files stored with 0444 permissions prevent accidental modification
 - **JSON catalog**: Human-readable format simplifies debugging and inspection
+- **RESTful API design**: Resource-oriented design following REST principles
+- **Content-based ETags**: SHA-256 hash serves as perfect ETag for HTTP caching
+- **12-factor configuration**: Supports both command-line flags and environment variables
+- **Middleware composition**: Clean separation of cross-cutting concerns (logging, auth, CORS)
 
 ## Development
 
