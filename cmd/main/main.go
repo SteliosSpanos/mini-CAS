@@ -17,6 +17,7 @@ func main() {
 		fmt.Println("    cat      Show a specific file from the storage")
 		fmt.Println("    status   Show CAS status and analytics")
 		fmt.Println("    verify   Verify all the contents of the storage")
+		fmt.Println("    serve    Start HTTP API server")
 		os.Exit(1)
 	}
 
@@ -38,6 +39,8 @@ func main() {
 		commands.HashFile(args)
 	case "verify":
 		commands.Verify()
+	case "serve":
+		commands.Serve(args)
 	default:
 		fmt.Println("Not a valid command")
 		os.Exit(1)
