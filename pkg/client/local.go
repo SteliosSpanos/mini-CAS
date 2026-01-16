@@ -134,7 +134,7 @@ func (c *LocalClient) GetEntry(ctx context.Context, filepath string) (catalog.En
 	}
 
 	c.mu.RLock()
-	defer c.mu.Unlock()
+	defer c.mu.RUnlock()
 
 	if err := c.catalog.Load(); err != nil {
 		return catalog.Entry{}, fmt.Errorf("failed to relaod catalog: %w", err)
