@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 
@@ -62,4 +63,67 @@ func (c *LocalClient) Download(ctx context.Context, hash string) (io.ReadCloser,
 	}
 
 	return reader, nil
+}
+
+func (c *LocalClient) Stat(ctx context.Context, hash string) (BlobInfo, error) {
+	if err := ctx.Err(); err != nil {
+		return BlobInfo{}, err
+	}
+
+	if len(hash) != 64 {
+		return BlobInfo{}, ErrInvalidHash
+	}
+
+	blobPath := filepath.Join(c.casDir, "storage", hash[:2], hash[2:4], hash)
+
+	info, err := os.Stat(blobPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return BlobInfo{Hash: hash, Exists: false}, nil
+		}
+		return BlobInfo{}, fmt.Errorf("stat failed: %w", err)
+	}
+
+	return BlobInfo{
+		Hash:   hash,
+		Size:   info.Size(),
+		Exists: true,
+	}, nil
+}
+
+func (c *LocalClient) Exists(ctx context.Context, hash string) (bool, error) {
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+
+	if len(hash) != 64 {
+		return false, ErrInvalidHash
+	}
+
+	blobPath := filepath.Join(c.casDir, hash[:2], hash[2:4], hash)
+
+	_, err := os.Stat(blobPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("stat failed: %w", err)
+	}
+
+	return true, nil
+}
+
+func (c *LocalClient) GetCatalog(ctx context.Context) ([]catalog.Entry, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	if err := c.catalog.Load(); err != nil {
+		return nil, fmt.Errorf("failed to reload catalog: %w", err)
+	}
+
+	return c.catalog.ListEntries(), nil
 }
