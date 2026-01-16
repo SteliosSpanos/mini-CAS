@@ -184,6 +184,8 @@ Mini-CAS is built with a layered architecture:
 +------------------+------------------+
 |  Command Layer   |   HTTP Server    |  CLI and REST API interfaces
 +------------------+------------------+
+|            Client Layer             |  Unified local/remote access interface
++-------------------------------------+
 |         Repository Layer            |  Manages .cas/ directory structure
 +-------------------------------------+
 |          Catalog Layer              |  Maps file paths to content hashes
@@ -198,6 +200,7 @@ Mini-CAS is built with a layered architecture:
 - **Storage Layer**: Manages physical blob storage with 2-level sharding and streaming I/O
 - **Catalog Layer**: Maps original file paths to content hashes with JSON persistence
 - **Repository Layer**: Manages the `.cas/` directory structure
+- **Client Layer**: Unified interface for local and remote storage access with thread-safe catalog operations
 - **Command Layer**: User-facing CLI commands (init, add, ls, cat, status, hash, verify, serve)
 - **HTTP Server**: RESTful API with streaming endpoints, middleware chain, and graceful shutdown
 
@@ -215,6 +218,179 @@ Files are stored using a 2-level sharding strategy based on the SHA-256 hash:
 ```
 
 This sharding approach (using the first 4 characters of the hash split into two directory levels) scales to millions of files without filesystem performance degradation.
+
+## Client Library
+
+Mini-CAS provides a unified client abstraction that works with both local and remote CAS repositories. The client library offers a consistent interface regardless of whether you're accessing storage locally or via HTTP.
+
+### Client Interface
+
+The client package defines a `Client` interface that combines blob operations, catalog operations, and lifecycle management:
+
+```go
+type Client interface {
+    BlobOperations      // Upload, Download, Stat, Exists
+    CatalogOperations   // GetCatalog, GetEntry, AddEntry, SaveCatalog
+    io.Closer          // Resource cleanup
+}
+```
+
+### Local Client
+
+The `LocalClient` provides direct access to a local CAS repository with zero overhead. It wraps the existing storage and catalog packages with thread-safe access using `sync.RWMutex`.
+
+**Example usage:**
+
+```go
+import "github.com/SteliosSpanos/mini-CAS/pkg/client"
+
+// Create local client
+client, err := client.NewLocalClient(".cas")
+if err != nil {
+    log.Fatal(err)
+}
+defer client.Close()
+
+// Upload a file
+file, _ := os.Open("example.txt")
+hash, err := client.Upload(context.Background(), file)
+file.Close()
+
+// Download by hash
+reader, err := client.Download(context.Background(), hash)
+if err != nil {
+    log.Fatal(err)
+}
+defer reader.Close()
+io.Copy(os.Stdout, reader)
+
+// Check if blob exists
+exists, err := client.Exists(context.Background(), hash)
+
+// Get catalog entries
+entries, err := client.GetCatalog(context.Background())
+```
+
+### HTTP Client
+
+The `HTTPClient` provides remote access to a CAS repository via the HTTP API. It handles authentication, connection pooling, and proper error handling.
+
+**Example usage:**
+
+```go
+// Create HTTP client
+client := client.NewHTTPClient("http://localhost:8080", "secret-token")
+defer client.Close()
+
+// Upload blob
+file, _ := os.Open("data.bin")
+hash, err := client.Upload(context.Background(), file)
+file.Close()
+
+// Download blob
+reader, err := client.Download(context.Background(), hash)
+// (Note: Download and other methods are planned for future implementation)
+```
+
+### Configuration
+
+The client package supports multiple configuration methods:
+
+**1. Direct configuration:**
+
+```go
+cfg := client.Config{
+    ServerURL: "http://localhost:8080",  // For HTTP client
+    AuthToken: "secret-token",           // Optional auth token
+    CASDir:    ".cas",                   // For local client
+}
+client, err := client.NewClient(cfg)
+```
+
+**2. Environment variables (12-factor):**
+
+```go
+// Reads from environment:
+// - CAS_SERVER_URL: HTTP server URL (e.g., "http://localhost:8080")
+// - CAS_AUTH_TOKEN: Bearer token for authentication
+// - CAS_DIR: Local CAS directory (defaults to ".cas")
+client, err := client.NewClientFromEnv()
+```
+
+The factory automatically selects the appropriate client type:
+- If `ServerURL` is set, creates an `HTTPClient`
+- Otherwise, creates a `LocalClient` with the specified `CASDir`
+
+### Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `CAS_SERVER_URL` | HTTP server URL for remote access | (empty, uses local) |
+| `CAS_AUTH_TOKEN` | Bearer token for HTTP authentication | (empty, no auth) |
+| `CAS_DIR` | Local CAS repository directory | `.cas` |
+
+**Example:**
+
+```bash
+# Use remote server
+export CAS_SERVER_URL=http://cas.example.com:8080
+export CAS_AUTH_TOKEN=production-secret
+
+# Use local repository
+export CAS_DIR=/var/lib/cas
+
+# Your application automatically uses the correct client
+./my-cas-application
+```
+
+### Error Handling
+
+The client package defines custom error types for precise error handling:
+
+```go
+import "errors"
+
+// Check for specific errors
+reader, err := client.Download(ctx, hash)
+if errors.Is(err, client.ErrBlobNotFound) {
+    log.Println("Blob does not exist")
+}
+if errors.Is(err, client.ErrInvalidHash) {
+    log.Println("Invalid hash format")
+}
+
+// HTTP errors include status codes
+var httpErr *client.HTTPError
+if errors.As(err, &httpErr) {
+    log.Printf("HTTP %d: %s", httpErr.StatusCode, httpErr.Message)
+}
+```
+
+**Available error types:**
+- `ErrBlobNotFound`: Requested blob does not exist
+- `ErrEntryNotFound`: Catalog entry not found
+- `ErrCatalogNotSupported`: Operation not supported by client type
+- `ErrInvalidHash`: Hash format is invalid (must be 64 hex characters)
+- `HTTPError`: HTTP request failed with status code and message
+
+### Context Support
+
+All client operations support context cancellation and timeouts:
+
+```go
+// With timeout
+ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+defer cancel()
+hash, err := client.Upload(ctx, reader)
+
+// With cancellation
+ctx, cancel := context.WithCancel(context.Background())
+go func() {
+    <-interruptSignal
+    cancel()
+}()
+reader, err := client.Download(ctx, hash)
+```
 
 ## HTTP API Server
 
@@ -373,6 +549,12 @@ mini-CAS/
 │   ├── storage/        # Physical storage management
 │   ├── catalog/        # Path-to-hash mapping
 │   ├── path/           # Repository initialization
+│   ├── client/         # Unified local/remote client interface
+│   │   ├── client.go   # Client interface definitions
+│   │   ├── errors.go   # Custom error types
+│   │   ├── config.go   # Configuration and factory functions
+│   │   ├── local.go    # Local client implementation
+│   │   └── http.go     # HTTP client implementation
 │   └── server/         # HTTP server implementation
 │       ├── server.go   # Server lifecycle and configuration
 │       ├── handlers.go # HTTP request handlers
