@@ -127,3 +127,54 @@ func (c *LocalClient) GetCatalog(ctx context.Context) ([]catalog.Entry, error) {
 
 	return c.catalog.ListEntries(), nil
 }
+
+func (c *LocalClient) GetEntry(ctx context.Context, filepath string) (catalog.Entry, error) {
+	if err := ctx.Err(); err != nil {
+		return catalog.Entry{}, err
+	}
+
+	c.mu.RLock()
+	defer c.mu.Unlock()
+
+	if err := c.catalog.Load(); err != nil {
+		return catalog.Entry{}, fmt.Errorf("failed to relaod catalog: %w", err)
+	}
+
+	entry, err := c.catalog.GetEntry(filepath)
+	if err != nil {
+		return catalog.Entry{}, ErrEntryNotFound
+	}
+
+	return entry, nil
+}
+
+func (c *LocalClient) AddEntry(ctx context.Context, entry catalog.Entry) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.catalog.AddEntry(entry)
+	return nil
+}
+
+func (c *LocalClient) SaveCatalog(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if err := c.catalog.Save(); err != nil {
+		return fmt.Errorf("failed to save catalog: %w", err)
+	}
+
+	return nil
+}
+
+func (c *LocalClient) Close() error {
+	return nil
+}
