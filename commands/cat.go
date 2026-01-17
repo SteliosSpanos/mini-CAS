@@ -1,22 +1,16 @@
 package commands
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 
-	"github.com/SteliosSpanos/mini-CAS/pkg/catalog"
-	"github.com/SteliosSpanos/mini-CAS/pkg/path"
-	"github.com/SteliosSpanos/mini-CAS/pkg/storage"
+	"github.com/SteliosSpanos/mini-CAS/pkg/client"
 )
 
 func Cat(args []string) {
-	repo, err := path.Open(".")
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Not a CAS repository. Run './cas init' first: %v\n", err)
-		os.Exit(1)
-	}
-
 	if len(args) != 1 {
 		fmt.Fprintf(os.Stderr, "Usage: ./cas cat <filepath>\n")
 		os.Exit(1)
@@ -24,24 +18,35 @@ func Cat(args []string) {
 
 	filePath := args[0]
 
-	cat := catalog.NewCatalog(repo.RootDir)
-	if err := cat.Load(); err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to load catalog: %v\n", err)
-		os.Exit(1)
-	}
-
-	entry, err := cat.GetEntry(filePath)
+	c, err := client.NewClientFromEnv()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "This file doesn't exist in the catalog: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Failed to create client: %v\n", err)
 		os.Exit(1)
 	}
+	defer c.Close()
 
-	file, err := storage.OpenBlob(repo.RootDir, entry.Hash)
+	ctx := context.Background()
+
+	entry, err := c.GetEntry(ctx, filePath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to open blob: %v\n", err)
+		if errors.Is(err, client.ErrEntryNotFound) {
+			fmt.Fprintf(os.Stderr, "This file doesn't exist in the catalog: %s\n", filePath)
+		} else {
+			fmt.Fprintf(os.Stderr, "Failed to get entry: %v\n", err)
+		}
 		os.Exit(1)
 	}
-	defer file.Close()
 
-	io.Copy(os.Stdout, file)
+	reader, err := c.Download(ctx, entry.Hash)
+	if err != nil {
+		if errors.Is(err, client.ErrBlobNotFound) {
+			fmt.Fprintf(os.Stderr, "Blob not found in storage: %s\n", entry.Hash)
+		} else {
+			fmt.Fprintf(os.Stderr, "Failed to download blob: %v\n", err)
+		}
+		os.Exit(1)
+	}
+	defer reader.Close()
+
+	io.Copy(os.Stdout, reader)
 }

@@ -1,29 +1,24 @@
 package commands
 
 import (
+	"context"
 	"fmt"
 	"os"
 
 	"github.com/SteliosSpanos/mini-CAS/pkg/catalog"
-	"github.com/SteliosSpanos/mini-CAS/pkg/path"
+	"github.com/SteliosSpanos/mini-CAS/pkg/client"
 )
 
 func Status() {
-	repo, err := path.Open(".")
+	c, err := client.NewClientFromEnv()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Not a CAS repository. Run './cas init' first: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Failed to create client: %v\n", err)
 		os.Exit(1)
 	}
+	defer c.Close()
 
-	cat := catalog.NewCatalog(repo.RootDir)
-	if err := cat.Load(); err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to load catalog: %v\n", err)
-		os.Exit(1)
-	}
-
-	entries := cat.ListEntries()
-
-	if len(entries) == 0 {
+	entries, err := c.GetCatalog(context.Background())
+	if err != nil {
 		fmt.Fprintf(os.Stderr, "No files tracked in catalog\n")
 		os.Exit(1)
 	}
