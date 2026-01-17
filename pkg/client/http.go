@@ -6,7 +6,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"time"
+
+	"github.com/SteliosSpanos/mini-CAS/pkg/catalog"
 )
 
 type HTTPClient struct {
@@ -180,4 +183,82 @@ func (c *HTTPClient) Exists(ctx context.Context, hash string) (bool, error) {
 	}
 
 	return false, &HTTPError{StatusCode: resp.StatusCode, Message: "unexpected status"}
+}
+
+func (c *HTTPClient) GetCatalog(ctx context.Context) ([]catalog.Entry, error) {
+	url := c.baseURL + "/catalog"
+
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	if c.authToken != "" {
+		req.Header.Set("Authorization", "Bearer"+c.authToken)
+	}
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("catalog request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		return nil, &HTTPError{StatusCode: resp.StatusCode, Message: string(body)}
+	}
+
+	var entries []catalog.Entry
+	if err := json.NewDecoder(resp.Body).Decode(&entries); err != nil {
+		return nil, fmt.Errorf("failed to parse catalog: %w", err)
+	}
+
+	return entries, nil
+}
+
+func (c *HTTPClient) GetEntry(ctx context.Context, filepath string) (catalog.Entry, error) {
+	reqURL := fmt.Sprintf("%s/catalog?filepath=%s", c.baseURL, url.QueryEscape(filepath))
+
+	req, err := http.NewRequestWithContext(ctx, "GET", reqURL, nil)
+	if err != nil {
+		return catalog.Entry{}, fmt.Errorf("failed to request: %w", err)
+	}
+
+	if c.authToken != "" {
+		req.Header.Set("Authorization", "Bearer "+c.authToken)
+	}
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return catalog.Entry{}, fmt.Errorf("entry request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return catalog.Entry{}, ErrEntryNotFound
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		return catalog.Entry{}, &HTTPError{StatusCode: resp.StatusCode, Message: string(body)}
+	}
+
+	var entry catalog.Entry
+	if err := json.NewDecoder(resp.Body).Decode(&entry); err != nil {
+		return catalog.Entry{}, fmt.Errorf("failed to parse entry: %w", err)
+	}
+
+	return entry, nil
+}
+
+func (c *HTTPClient) AddEntry(ctx context.Context, entry catalog.Entry) error {
+	return ErrCatalogNotSupported
+}
+
+func (c *HTTPClient) SaveCatalog(ctx context.Context) error {
+	return ErrCatalogNotSupported
+}
+
+func (c *HTTPClient) Close() error {
+	return nil
 }
