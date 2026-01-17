@@ -118,7 +118,7 @@ func (c *HTTPClient) Stat(ctx context.Context, hash string) (BlobInfo, error) {
 	}
 
 	if c.authToken != "" {
-		req.Header.Set("Authorization", "Bearer"+c.authToken)
+		req.Header.Set("Authorization", "Bearer "+c.authToken)
 	}
 
 	resp, err := c.client.Do(req)
@@ -147,4 +147,37 @@ func (c *HTTPClient) Stat(ctx context.Context, hash string) (BlobInfo, error) {
 		Size:   result.Size,
 		Exists: result.Exists,
 	}, nil
+}
+
+func (c *HTTPClient) Exists(ctx context.Context, hash string) (bool, error) {
+	if len(hash) != 64 {
+		return false, ErrInvalidHash
+	}
+
+	url := fmt.Sprintf("%s/blob/%s", c.baseURL, hash)
+
+	req, err := http.NewRequestWithContext(ctx, "HEAD", url, nil)
+	if err != nil {
+		return false, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	if c.authToken != "" {
+		req.Header.Set("Authorization", "Bearer "+c.authToken)
+	}
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return false, fmt.Errorf("exists request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusOK {
+		return true, nil
+	}
+
+	if resp.StatusCode == http.StatusNotFound {
+		return false, nil
+	}
+
+	return false, &HTTPError{StatusCode: resp.StatusCode, Message: "unexpected status"}
 }
