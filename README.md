@@ -21,6 +21,9 @@ Content-addressable storage eliminates duplicate files automatically by storing 
 - **ETag caching**: Content-based ETags enable perfect HTTP caching
 - **Graceful shutdown**: Handles SIGTERM/SIGINT signals properly
 - **Flexible configuration**: Command-line flags and environment variables support
+- **Location transparency**: Unified client interface for local and remote storage access
+- **Remote operation**: All CLI commands work seamlessly with remote servers via HTTP
+- **Thread-safe access**: Safe concurrent operations with read-write mutex protection
 
 ## Installation
 
@@ -34,6 +37,8 @@ go build -o cas ./cmd/main
 ```
 
 ## Quick Start
+
+### Local Mode (Default)
 
 ```bash
 # Initialize a new CAS repository
@@ -53,6 +58,23 @@ go build -o cas ./cmd/main
 ./cas cat myfile.txt
 
 # Verify storage integrity
+./cas verify
+```
+
+### Remote Mode
+
+```bash
+# Start a server in one terminal
+./cas serve --port 8080 --auth-token mysecret
+
+# In another terminal, configure remote access
+export CAS_SERVER_URL=http://localhost:8080
+export CAS_AUTH_TOKEN=mysecret
+
+# Now all commands work remotely
+./cas add myfile.txt
+./cas ls
+./cas cat myfile.txt
 ./cas verify
 ```
 
@@ -273,7 +295,7 @@ entries, err := client.GetCatalog(context.Background())
 
 ### HTTP Client
 
-The `HTTPClient` provides remote access to a CAS repository via the HTTP API. It handles authentication, connection pooling, and proper error handling.
+The `HTTPClient` provides remote access to a CAS repository via the HTTP API. It handles authentication, connection pooling, and proper error handling. All blob and catalog operations are fully implemented.
 
 **Example usage:**
 
@@ -289,7 +311,32 @@ file.Close()
 
 // Download blob
 reader, err := client.Download(context.Background(), hash)
-// (Note: Download and other methods are planned for future implementation)
+if err != nil {
+    log.Fatal(err)
+}
+defer reader.Close()
+io.Copy(os.Stdout, reader)
+
+// Check if blob exists
+exists, err := client.Exists(context.Background(), hash)
+
+// Get blob metadata
+info, err := client.Stat(context.Background(), hash)
+
+// Get catalog entries
+entries, err := client.GetCatalog(context.Background())
+
+// Get single entry
+entry, err := client.GetEntry(context.Background(), "path/to/file.txt")
+
+// Add catalog entry (blob must exist on server)
+entry := catalog.Entry{
+    Filepath: "config.json",
+    Hash:     hash,
+    Filesize: 1024,
+    ModTime:  time.Now(),
+}
+err = client.AddEntry(context.Background(), entry)
 ```
 
 ### Configuration
@@ -407,6 +454,7 @@ Mini-CAS includes a production-ready HTTP server that exposes the storage system
 | `/catalog` | GET | No | Get full catalog as JSON |
 | `/catalog?filepath=path` | GET | No | Get single catalog entry by filepath |
 | `/blobs` | POST | Yes | Upload blob (streaming, returns hash) |
+| `/catalog` | POST | Yes | Add catalog entry (blob must exist) |
 
 ### Configuration
 
@@ -499,6 +547,20 @@ echo "Hello, World!" | curl -X POST http://localhost:8080/blobs \
 # {"hash":"dffd6021bb2bd5b0af676290809ec3a53191dd81c7f70a4b28688a362182986f","size":14}
 ```
 
+**Add catalog entry:**
+```bash
+curl -X POST http://localhost:8080/catalog \
+  -H "Authorization: Bearer secret123" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "filepath": "config.json",
+    "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "size": 1024,
+    "modified": "2024-01-15T10:30:00Z"
+  }'
+# Returns 201 Created with the catalog entry
+```
+
 ### API Features
 
 - **Streaming I/O**: All blob operations use streaming, supporting arbitrarily large files with constant memory usage
@@ -526,8 +588,10 @@ The server applies middleware in the following order:
 - Read operations (GET, HEAD) are always public
 - Write operations (POST) require Bearer token authentication if configured
 - CORS can be restricted to specific origins
-- The server does not expose catalog write operations (catalog is updated via CLI only)
+- Catalog write operations (POST /catalog) validate that blobs exist before accepting entries
+- Path traversal is prevented in catalog entries
 - Blobs are immutable and stored with read-only permissions
+- All hash inputs are validated (must be 64 hex characters)
 
 ## Project Structure
 
@@ -578,6 +642,97 @@ mini-CAS/
 - **12-factor configuration**: Supports both command-line flags and environment variables
 - **Middleware composition**: Clean separation of cross-cutting concerns (logging, auth, CORS)
 
+## Local vs Remote Mode
+
+Mini-CAS provides location transparency through a unified client interface. All CLI commands work identically in both local and remote modes.
+
+### Local Mode
+
+When no environment variables are set, Mini-CAS operates in local mode, accessing the `.cas/` directory directly:
+
+```bash
+# Local mode (default)
+./cas init
+./cas add myfile.txt
+./cas ls
+```
+
+The client uses `LocalClient` which provides:
+- Zero-overhead direct access to storage and catalog
+- Thread-safe concurrent operations with `sync.RWMutex`
+- Immediate catalog persistence
+
+### Remote Mode
+
+When `CAS_SERVER_URL` is set, Mini-CAS operates in remote mode, communicating with an HTTP server:
+
+```bash
+# Terminal 1: Start server
+./cas serve --port 8080 --auth-token mysecret
+
+# Terminal 2: Configure remote mode
+export CAS_SERVER_URL=http://localhost:8080
+export CAS_AUTH_TOKEN=mysecret
+
+# All commands now work remotely
+./cas add myfile.txt      # Uploads to server
+./cas ls                  # Fetches catalog from server
+./cas cat myfile.txt      # Downloads and displays from server
+./cas verify              # Verifies against server storage
+```
+
+The client uses `HTTPClient` which provides:
+- HTTP connection pooling for performance
+- Automatic authentication with Bearer tokens
+- Streaming uploads and downloads
+- Proper error handling with HTTP status codes
+
+### Command Behavior Differences
+
+Most commands work identically in both modes. Key differences:
+
+| Command | Local Mode | Remote Mode |
+|---------|-----------|-------------|
+| `init` | Creates `.cas/` directory | Not applicable (server manages repo) |
+| `add` | Saves catalog after upload | Server saves catalog automatically |
+| `ls` | Reads local catalog | Fetches catalog from server |
+| `cat` | Reads from local storage | Downloads from server |
+| `status` | Analyzes local catalog | Fetches catalog from server |
+| `verify` | Opens local blobs | Downloads blobs from server |
+| `serve` | Starts HTTP server | Not applicable |
+| `hash` | Standalone utility | Standalone utility |
+
+### Testing Remote Mode
+
+To test the complete remote workflow:
+
+```bash
+# 1. Initialize and populate local repository
+./cas init
+./cas add test.txt
+
+# 2. Start server in background
+./cas serve --port 8080 --auth-token test123 &
+SERVER_PID=$!
+
+# 3. Configure remote access
+export CAS_SERVER_URL=http://localhost:8080
+export CAS_AUTH_TOKEN=test123
+
+# 4. Add new files remotely
+./cas add newfile.txt
+
+# 5. List all files (from server)
+./cas ls
+
+# 6. Verify integrity (downloads from server)
+./cas verify
+
+# 7. Cleanup
+kill $SERVER_PID
+unset CAS_SERVER_URL CAS_AUTH_TOKEN
+```
+
 ## Development
 
 ```bash
@@ -589,6 +744,8 @@ go test ./pkg/...
 
 # Run tests for a specific package
 go test ./pkg/storage
+go test ./pkg/client
+go test ./pkg/server
 ```
 
 ## License
