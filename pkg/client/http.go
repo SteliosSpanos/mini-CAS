@@ -195,7 +195,7 @@ func (c *HTTPClient) GetCatalog(ctx context.Context) ([]catalog.Entry, error) {
 	}
 
 	if c.authToken != "" {
-		req.Header.Set("Authorization", "Bearer"+c.authToken)
+		req.Header.Set("Authorization", "Bearer "+c.authToken)
 	}
 
 	resp, err := c.client.Do(req)
