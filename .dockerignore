@@ -1,0 +1,23 @@
+# Binaries                                                                                               
+  cas                                                                                                      
+  *.exe                                                                                                    
+                                                                                                           
+  # Local test data                                                                                        
+  .cas/                                                                                                    
+  data/                                                                                                    
+                                                                                                           
+  # IDE                                                                                                    
+  .idea/                                                                                                   
+  .vscode/                                                                                                 
+                                                                                                           
+  # Git                                                                                                    
+  .git/                                                                                                    
+  .gitignore                                                                                               
+                                                                                                           
+  # Test files                                                                                             
+  *.txt                                                                                                    
+  *.test                                                                                                   
+                                                                                                           
+  # Documentation (not needed in image)                                                                    
+  *.md                                                                                                     
+  FILE_STRUCTURE.txt  

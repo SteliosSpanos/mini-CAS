@@ -1,0 +1,9 @@
+services:
+  cas-server:
+    build: .
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./docker-data:/data
+    environment:
+      - CAS_AUTH_TOKEN=mysecret
