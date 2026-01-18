@@ -36,11 +36,11 @@ func Verify() {
 		reader, err := c.Download(ctx, entry.Hash)
 		if err != nil {
 			if errors.Is(err, client.ErrBlobNotFound) {
-				fmt.Fprintf(os.Stderr, " MISSING: %s (hash %s)\n", entry.Filepath, entry.Hash)
+				fmt.Fprintf(os.Stderr, "MISSING: %s (hash %s)\n", entry.Filepath, entry.Hash)
 				missing++
 				continue
 			}
-			fmt.Printf(" ERROR: %s - failed to download: %v\n", entry.Filepath, err)
+			fmt.Printf("ERROR: %s - failed to download: %v\n", entry.Filepath, err)
 			corrupted++
 			continue
 		}
@@ -48,7 +48,7 @@ func Verify() {
 		hasher := sha256.New()
 
 		if _, err := io.Copy(hasher, reader); err != nil {
-			fmt.Printf(" ERROR: %s - failed to read %v\n", entry.Filepath, err)
+			fmt.Printf("ERROR: %s - failed to read %v\n", entry.Filepath, err)
 			reader.Close()
 			corrupted++
 			continue
@@ -58,12 +58,12 @@ func Verify() {
 		computedHash := fmt.Sprintf("%x", hasher.Sum(nil))
 
 		if computedHash != entry.Hash {
-			fmt.Printf(" CORRUPT: %s\n", entry.Filepath)
-			fmt.Printf("  Expected: %s\n", entry.Hash[:8])
-			fmt.Printf("  Got:      %s\n", entry.Hash[:8])
+			fmt.Printf("CORRUPT: %s\n", entry.Filepath)
+			fmt.Printf(" Expected: %s\n", entry.Hash[:8])
+			fmt.Printf(" Got:      %s\n", entry.Hash[:8])
 			corrupted++
 		} else {
-			fmt.Printf("  OK: %s\n", entry.Filepath)
+			fmt.Printf("OK: %s\n", entry.Filepath)
 			verified++
 		}
 	}
