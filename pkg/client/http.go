@@ -1,6 +1,7 @@
 package client
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -86,7 +87,7 @@ func (c *HTTPClient) Download(ctx context.Context, hash string) (io.ReadCloser, 
 	}
 
 	if c.authToken != "" {
-		req.Header.Set("Authorization", "Bearer"+c.authToken)
+		req.Header.Set("Authorization", "Bearer "+c.authToken)
 	}
 
 	resp, err := c.client.Do(req)
@@ -252,11 +253,53 @@ func (c *HTTPClient) GetEntry(ctx context.Context, filepath string) (catalog.Ent
 }
 
 func (c *HTTPClient) AddEntry(ctx context.Context, entry catalog.Entry) error {
-	return ErrCatalogNotSupported
+	reqBody := struct {
+		Filepath string    `json:"filepath"`
+		Hash     string    `json:"hash"`
+		Size     uint64    `json:"size"`
+		Modified time.Time `json:"modified"`
+	}{
+		Filepath: entry.Filepath,
+		Hash:     entry.Hash,
+		Size:     entry.Filesize,
+		Modified: entry.ModTime,
+	}
+
+	jsonBody, err := json.Marshal(reqBody)
+	if err != nil {
+		return fmt.Errorf("failed to marshal entry: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", c.baseURL+"/catalog", bytes.NewReader(jsonBody))
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	if c.authToken != "" {
+		req.Header.Set("Authorization", "Bearer "+c.authToken)
+	}
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return fmt.Errorf("catalog request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return ErrBlobNotFound
+	}
+
+	if resp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		return &HTTPError{StatusCode: resp.StatusCode, Message: string(body)}
+	}
+
+	return nil
 }
 
 func (c *HTTPClient) SaveCatalog(ctx context.Context) error {
-	return ErrCatalogNotSupported
+	return nil
 }
 
 func (c *HTTPClient) Close() error {
