@@ -1,22 +1,17 @@
 package commands
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 
 	"github.com/SteliosSpanos/mini-CAS/pkg/catalog"
-	"github.com/SteliosSpanos/mini-CAS/pkg/path"
-	"github.com/SteliosSpanos/mini-CAS/pkg/storage"
+	"github.com/SteliosSpanos/mini-CAS/pkg/client"
 )
 
 func Add(args []string) {
-	repo, err := path.Open(".")
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Not a CAS repository. Run './cas init' first: %v\n", err)
-		os.Exit(1)
-	}
-
 	if len(args) != 1 {
 		fmt.Fprintf(os.Stderr, "Usage: ./cas add <object>\n")
 		os.Exit(1)
@@ -24,11 +19,12 @@ func Add(args []string) {
 
 	targetPath := args[0]
 
-	cat := catalog.NewCatalog(repo.RootDir)
-	if err := cat.Load(); err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to load catalog: %v\n", err)
+	c, err := client.NewClientFromEnv()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to create client: %v\n", err)
 		os.Exit(1)
 	}
+	defer c.Close()
 
 	info, err := os.Stat(targetPath)
 	if err != nil {
@@ -36,27 +32,33 @@ func Add(args []string) {
 		os.Exit(1)
 	}
 
+	ctx := context.Background()
+
 	if info.IsDir() {
-		if err := addDirectory(repo.RootDir, targetPath, cat); err != nil {
+		if err := addDirectory(ctx, c, targetPath); err != nil {
 			fmt.Fprintf(os.Stderr, "Failed to add directory: %v\n", err)
 			os.Exit(1)
 		}
 	} else {
-		if err := addFile(repo.RootDir, targetPath, cat); err != nil {
+		if err := addFile(ctx, c, targetPath); err != nil {
 			fmt.Fprintf(os.Stderr, "Failed to add file: %v\n", err)
 			os.Exit(1)
 		}
 	}
 
-	if err := cat.Save(); err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to save catalog: %v\n", err)
-		os.Exit(1)
+	if err := c.SaveCatalog(ctx); err != nil {
+		if errors.Is(err, client.ErrCatalogNotSupported) {
+			fmt.Println("(Remote mode: server manages catalog)")
+		} else {
+			fmt.Fprintf(os.Stderr, "Failed to save catalog: %v\n", err)
+			os.Exit(1)
+		}
 	}
 
 	fmt.Printf("Successfully added %s\n", targetPath)
 }
 
-func addDirectory(casDir, dirPath string, cat *catalog.Catalog) error {
+func addDirectory(ctx context.Context, c client.Client, dirPath string) error {
 	return filepath.Walk(dirPath, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return fmt.Errorf("failed to walk the new directory: %w", err)
@@ -70,11 +72,11 @@ func addDirectory(casDir, dirPath string, cat *catalog.Catalog) error {
 			return nil
 		}
 
-		return addFile(casDir, path, cat)
+		return addFile(ctx, c, path)
 	})
 }
 
-func addFile(casDir, filePath string, cat *catalog.Catalog) error {
+func addFile(ctx context.Context, c client.Client, filePath string) error {
 	file, err := os.Open(filePath)
 	if err != nil {
 		return fmt.Errorf("failed to open file: %w", err)
@@ -86,9 +88,9 @@ func addFile(casDir, filePath string, cat *catalog.Catalog) error {
 		return fmt.Errorf("failed to stat file: %v\n", err)
 	}
 
-	hash, err := storage.WriteBlobStream(casDir, file)
+	hash, err := c.Upload(ctx, file)
 	if err != nil {
-		return fmt.Errorf("failed to write blob: %w", err)
+		return fmt.Errorf("failed to upload blob: %w", err)
 	}
 
 	entry := catalog.Entry{
@@ -98,7 +100,13 @@ func addFile(casDir, filePath string, cat *catalog.Catalog) error {
 		ModTime:  info.ModTime(),
 	}
 
-	cat.AddEntry(entry)
+	if err := c.AddEntry(ctx, entry); err != nil {
+		if errors.Is(err, client.ErrCatalogNotSupported) {
+			fmt.Printf("     %s -> %s (uploaded)\n", filePath, hash[:8])
+			return nil
+		}
+		return fmt.Errorf("failed to add catalog entry: %w", err)
+	}
 
 	fmt.Printf("     %s -> %s\n", filePath, hash[:8])
 	return nil
