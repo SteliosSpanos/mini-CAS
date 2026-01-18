@@ -1,13 +1,16 @@
 package server
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"regexp"
 	"strings"
+	"time"
 
+	"github.com/SteliosSpanos/mini-CAS/pkg/catalog"
 	"github.com/SteliosSpanos/mini-CAS/pkg/storage"
 )
 
@@ -113,10 +116,8 @@ func (s *Server) handleGetCatalog(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	if _, err := s.catalog.WriteTo(w); err != nil {
-		s.logger.Printf("Error writing catalog: %v", err)
-	}
+	entries := s.catalog.ListEntries()
+	WriteJSON(w, http.StatusOK, entries)
 }
 
 func (s *Server) handlePostBlob(w http.ResponseWriter, r *http.Request) {
@@ -142,6 +143,63 @@ func (s *Server) handlePostBlob(w http.ResponseWriter, r *http.Request) {
 	}
 
 	WriteJSON(w, http.StatusCreated, response)
+}
+
+func (s *Server) handlePostCatalog(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Filepath string    `json:"filepath"`
+		Hash     string    `json:"hash"`
+		Size     uint64    `json:"size"`
+		Modified time.Time `json:"modified"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		WriteError(w, http.StatusBadRequest, "Invalid JSON")
+		return
+	}
+
+	if req.Filepath == "" || req.Hash == "" {
+		WriteError(w, http.StatusBadRequest, "filepath and hash are required")
+		return
+	}
+
+	if !isValidHash(req.Hash) {
+		WriteError(w, http.StatusBadRequest, "Invalid hash format: must be 64 hex characters")
+		return
+	}
+
+	if strings.Contains(req.Filepath, "..") {
+		WriteError(w, http.StatusBadRequest, "Path traversal not allowed")
+		return
+	}
+
+	_, err := storage.OpenBlob(s.casDir, req.Hash)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			WriteError(w, http.StatusNotFound, fmt.Sprintf("Blob %s not found - upload blob first", req.Hash[:8]))
+		} else {
+			WriteError(w, http.StatusInternalServerError, "Failed to verify blob")
+		}
+		return
+	}
+
+	entry := catalog.Entry{
+		Filepath: req.Filepath,
+		Hash:     req.Hash,
+		Filesize: req.Size,
+		ModTime:  req.Modified,
+	}
+
+	s.catalog.AddEntry(entry)
+
+	if err := s.catalog.Save(); err != nil {
+		s.logger.Printf("Error saving catalog: %v", err)
+		WriteError(w, http.StatusInternalServerError, "Failed to save catalog")
+		return
+	}
+
+	s.logger.Printf("Added catalog entry: %s -> %s", req.Filepath, req.Hash[:8])
+	WriteJSON(w, http.StatusCreated, entry)
 }
 
 func getSizeFromFile(reader io.ReadCloser) int64 {
