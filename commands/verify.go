@@ -1,30 +1,31 @@
 package commands
 
 import (
+	"context"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 
-	"github.com/SteliosSpanos/mini-CAS/pkg/catalog"
-	"github.com/SteliosSpanos/mini-CAS/pkg/path"
-	"github.com/SteliosSpanos/mini-CAS/pkg/storage"
+	"github.com/SteliosSpanos/mini-CAS/pkg/client"
 )
 
 func Verify() {
-	repo, err := path.Open(".")
+	c, err := client.NewClientFromEnv()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Not a CAS repository. Run './cas init' first: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Failed to create client: %v\n", err)
 		os.Exit(1)
 	}
+	defer c.Close()
 
-	cat := catalog.NewCatalog(repo.RootDir)
-	if err := cat.Load(); err != nil {
+	ctx := context.Background()
+
+	entries, err := c.GetCatalog(ctx)
+	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to load catalog: %v\n", err)
 		os.Exit(1)
 	}
-
-	entries := cat.ListEntries()
 
 	totalFiles := len(entries)
 	verified := 0
@@ -32,22 +33,27 @@ func Verify() {
 	missing := 0
 
 	for _, entry := range entries {
-		file, err := storage.OpenBlob(repo.RootDir, entry.Hash)
+		reader, err := c.Download(ctx, entry.Hash)
 		if err != nil {
-			fmt.Printf(" MISSING: %s (hash %s)\n", entry.Filepath, entry.Hash[:8])
-			missing++
+			if errors.Is(err, client.ErrBlobNotFound) {
+				fmt.Fprintf(os.Stderr, " MISSING: %s (hash %s)\n", entry.Filepath, entry.Hash)
+				missing++
+				continue
+			}
+			fmt.Printf(" ERROR: %s - failed to download: %v\n", entry.Filepath, err)
+			corrupted++
 			continue
 		}
 
 		hasher := sha256.New()
 
-		if _, err := io.Copy(hasher, file); err != nil {
+		if _, err := io.Copy(hasher, reader); err != nil {
 			fmt.Printf(" ERROR: %s - failed to read %v\n", entry.Filepath, err)
-			file.Close()
+			reader.Close()
 			corrupted++
 			continue
 		}
-		file.Close()
+		reader.Close()
 
 		computedHash := fmt.Sprintf("%x", hasher.Sum(nil))
 
