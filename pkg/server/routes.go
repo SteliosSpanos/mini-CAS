@@ -13,6 +13,7 @@ func (s *Server) setupRoutes() http.Handler {
 	mux.HandleFunc("GET /blob/{hash}/stat", s.handleStatBlob)
 	mux.HandleFunc("GET /catalog", s.handleGetCatalog)
 	mux.HandleFunc("POST /blobs", s.handlePostBlob)
+	mux.HandleFunc("POST /catalog", s.handlePostCatalog)
 
 	handler := Chain(mux,
 		s.RecoveryMiddleware,
