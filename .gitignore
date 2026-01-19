@@ -1,0 +1,21 @@
+# Binary
+cas
+*.exe
+
+# Test data / Local repositories
+.cas/
+docker-data/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Go
+*.test
+
+# Documentation
+*.md
+FILE_STRUCTURE.txt
