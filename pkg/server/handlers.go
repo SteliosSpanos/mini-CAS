@@ -17,9 +17,15 @@ import (
 var hashRegex = regexp.MustCompile("^[a-f0-9]{64}$")
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
-	entries := s.catalog.ListEntries()
+	entries, err := s.catalog.ListEntries()
+	if err != nil {
+		s.logger.Printf("Failed to list entries: %v", err)
+		WriteError(w, http.StatusInternalServerError, "Failed to list entries")
+		return
+	}
 
 	uniqueHashes := make(map[string]bool)
+
 	for _, entry := range entries {
 		uniqueHashes[entry.Hash] = true
 	}
@@ -116,7 +122,14 @@ func (s *Server) handleGetCatalog(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	entries := s.catalog.ListEntries()
+	entries, err := s.catalog.ListEntries()
+	if err != nil {
+		s.logger.Printf("Failed to list entries: %v", err)
+		WriteError(w, http.StatusInternalServerError, "Failed to list entries")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
 	WriteJSON(w, http.StatusOK, entries)
 }
 
