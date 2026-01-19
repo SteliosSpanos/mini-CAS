@@ -125,7 +125,12 @@ func (c *LocalClient) GetCatalog(ctx context.Context) ([]catalog.Entry, error) {
 		return nil, fmt.Errorf("failed to reload catalog: %w", err)
 	}
 
-	return c.catalog.ListEntries(), nil
+	entries, err := c.catalog.ListEntries()
+	if err != nil {
+		return nil, fmt.Errorf("failed to list entries: %w", err)
+	}
+
+	return entries, nil
 }
 
 func (c *LocalClient) GetEntry(ctx context.Context, filepath string) (catalog.Entry, error) {
@@ -176,5 +181,5 @@ func (c *LocalClient) SaveCatalog(ctx context.Context) error {
 }
 
 func (c *LocalClient) Close() error {
-	return nil
+	return c.catalog.Close()
 }
