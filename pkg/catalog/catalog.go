@@ -1,12 +1,14 @@
 package catalog
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
-	"os"
 	"path/filepath"
 	"time"
+
+	_ "modernc.org/sqlite"
 )
 
 type Entry struct {
@@ -17,78 +19,149 @@ type Entry struct {
 }
 
 type Catalog struct {
-	entries map[string]Entry
-	casDir  string
+	db     *sql.DB
+	casDir string
 }
 
 func NewCatalog(casDir string) *Catalog {
 	return &Catalog{
-		casDir:  casDir,
-		entries: make(map[string]Entry),
+		casDir: casDir,
 	}
 }
 
-func (c *Catalog) AddEntry(entry Entry) {
-	c.entries[entry.Filepath] = entry
+func (c *Catalog) init() error {
+	if c.db != nil {
+		return nil
+	}
+
+	dbPath := filepath.Join(c.casDir, "catalog.db")
+
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		return fmt.Errorf("failed to open database: %w", err)
+	}
+
+	pragmas := []string{
+		"PRAGMA journal_mode=WAL",
+		"PRAGMA synchronous=NORMAL",
+		"PRAGMA busy_timeout=5000",
+	}
+
+	for _, p := range pragmas {
+		db.Exec(p)
+	}
+
+	schema := `
+			CREATE TABLE IF NOT EXISTS entries (
+					filepath TEXT PRIMARY KEY NOT NULL,
+					hash TEXT NOT NULL,
+					filesize INTEGER NOT NULL,
+					modtime INTEGER NOT NULL
+			);
+			CREATE INDEX IF NOT EXISTS idx_hash ON entries(hash);
+	`
+
+	if _, err := db.Exec(schema); err != nil {
+		db.Close()
+		return fmt.Errorf("failed to create schema: %w", err)
+	}
+
+	c.db = db
+	return nil
+}
+
+func (c *Catalog) AddEntry(entry Entry) error {
+	if err := c.init(); err != nil {
+		return err
+	}
+
+	query := `
+			INSERT INTO entries (filepath, hash, filesize, modTime)
+			VALUES (?, ?, ?, ?)
+			ON CONFLICT(filepath) DO UPDATE SET
+					hash = excluded.hash,
+					filesize = excluded.filesize,
+					modTime = excluded.modTime
+	`
+
+	_, err := c.db.Exec(query, entry.Filepath, entry.Hash, entry.Filesize, entry.ModTime.UnixNano())
+	return err
 }
 
 func (c *Catalog) GetEntry(path string) (Entry, error) {
-	entry, exists := c.entries[path]
-	if !exists {
+	if err := c.init(); err != nil {
+		return Entry{}, err
+	}
+
+	var entry Entry
+	var modtime int64
+
+	err := c.db.QueryRow(
+		"SELECT filepath, hash, filesize, modtime FROM entries WHERE filepath = ?",
+		path,
+	).Scan(&entry.Filepath, &entry.Hash, &entry.Filesize, &modtime)
+
+	if err == sql.ErrNoRows {
 		return Entry{}, fmt.Errorf("path not found in catalog: %s", path)
 	}
 
+	if err != nil {
+		return Entry{}, err
+	}
+
+	entry.ModTime = time.Unix(0, modtime)
 	return entry, nil
 }
 
-func (c *Catalog) ListEntries() []Entry {
-	entries := make([]Entry, 0, len(c.entries))
+func (c *Catalog) ListEntries() ([]Entry, error) {
+	if err := c.init(); err != nil {
+		return nil, err
+	}
 
-	for _, entry := range c.entries {
+	rows, err := c.db.Query("SELECT filepath, hash, filesize, modtime FROM entries ORDER BY filepath")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var entries []Entry
+	for rows.Next() {
+		var entry Entry
+		var modtime int64
+
+		if err := rows.Scan(&entry.Filepath, &entry.Hash, &entry.Filesize, &modtime); err != nil {
+			return nil, err
+		}
+
+		entry.ModTime = time.Unix(0, modtime)
 		entries = append(entries, entry)
 	}
 
-	return entries
+	return entries, rows.Err()
 }
 
 func (c *Catalog) Save() error {
-	catalogPath := filepath.Join(c.casDir, "catalog.json")
-
-	file, err := os.Create(catalogPath)
-	if err != nil {
-		return fmt.Errorf("failed to create catalog file: %w", err)
-	}
-	defer file.Close()
-
-	_, err = c.WriteTo(file)
-	return err
+	return c.init()
 }
 
 func (c *Catalog) Load() error {
-	catalogPath := filepath.Join(c.casDir, "catalog.json")
-
-	file, err := os.Open(catalogPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
-		return fmt.Errorf("failed to open catalog: %w", err)
-	}
-	defer file.Close()
-
-	_, err = c.ReadFrom(file)
-	return err
+	return c.init()
 }
 
 func (c *Catalog) WriteTo(w io.Writer) (int64, error) {
-	data, err := json.MarshalIndent(c.entries, "", " ")
+	entries, err := c.ListEntries()
 	if err != nil {
-		return 0, fmt.Errorf("failed to marshal catalog: %w", err)
+		return 0, fmt.Errorf("failed to list entries: %w", err)
+	}
+
+	data, err := json.MarshalIndent(entries, "", " ")
+	if err != nil {
+		return 0, fmt.Errorf("failed to marshal entries: %w", err)
 	}
 
 	n, err := w.Write(data)
 	if err != nil {
-		return 0, fmt.Errorf("failed to write catalog: %w", err)
+		return 0, fmt.Errorf("failed to write into Writer: %w", err)
 	}
 
 	return int64(n), nil
@@ -97,14 +170,41 @@ func (c *Catalog) WriteTo(w io.Writer) (int64, error) {
 func (c *Catalog) ReadFrom(r io.Reader) (int64, error) {
 	data, err := io.ReadAll(r)
 	if err != nil {
-		return 0, fmt.Errorf("failed to read catalog: %w", err)
+		return 0, fmt.Errorf("failed to read from Reader: %w", err)
 	}
 
-	if err := json.Unmarshal(data, &c.entries); err != nil {
-		return 0, fmt.Errorf("failed to unmarshal catalog: %w", err)
+	var entries []Entry
+	if err := json.Unmarshal(data, &entries); err != nil {
+		var entryMap map[string]Entry
+
+		if err := json.Unmarshal(data, &entryMap); err != nil {
+			return 0, fmt.Errorf("failed to unmarshal data: %w", err)
+		}
+
+		for _, entry := range entries {
+			entries = append(entries, entry)
+		}
+	}
+
+	if err := c.init(); err != nil {
+		return 0, err
+	}
+
+	for _, entry := range entries {
+		if err := c.AddEntry(entry); err != nil {
+			return 0, fmt.Errorf("failed to add entry: %w", err)
+		}
 	}
 
 	return int64(len(data)), nil
+}
+
+func (c *Catalog) Close() error {
+	if c.db != nil {
+		return c.db.Close()
+	}
+
+	return nil
 }
 
 func FormatSize(bytes uint64) string {
