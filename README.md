@@ -14,7 +14,7 @@ Content-addressable storage eliminates duplicate files automatically by storing 
 - **Interface-based design**: Follows Go best practices using `io.Reader`/`io.Writer` for flexibility and testability
 - **Efficient sharding**: 2-level directory sharding prevents filesystem performance degradation
 - **Immutable storage**: Blobs are write-once, read-many with enforced permissions
-- **Human-readable catalog**: JSON-based catalog for easy inspection and debugging
+- **SQLite catalog**: Fast, reliable SQLite database with WAL mode for concurrent access
 - **Directory support**: Add entire directory trees with a single command
 - **Integrity verification**: Verify stored content against catalog hashes
 - **RESTful HTTP API**: Production-ready HTTP server with streaming endpoints
@@ -24,8 +24,11 @@ Content-addressable storage eliminates duplicate files automatically by storing 
 - **Location transparency**: Unified client interface for local and remote storage access
 - **Remote operation**: All CLI commands work seamlessly with remote servers via HTTP
 - **Thread-safe access**: Safe concurrent operations with read-write mutex protection
+- **Docker support**: Multi-stage Docker builds with compose configuration for easy deployment
 
 ## Installation
+
+### From Source
 
 ```bash
 # Clone the repository
@@ -35,6 +38,19 @@ cd mini-CAS
 # Build the binary
 go build -o cas ./cmd/main
 ```
+
+### Docker
+
+```bash
+# Using Docker Compose (recommended)
+docker-compose up --build
+
+# Using Docker directly
+docker build -t mini-cas .
+docker run -p 8080:8080 -v $(pwd)/cas-data:/data mini-cas
+```
+
+The Docker image automatically initializes a CAS repository and starts the HTTP server on port 8080. Data persists in the mounted volume.
 
 ## Quick Start
 
@@ -220,7 +236,7 @@ Mini-CAS is built with a layered architecture:
 
 - **Objects Layer**: Defines the `Blob` type and SHA-256 hashing
 - **Storage Layer**: Manages physical blob storage with 2-level sharding and streaming I/O
-- **Catalog Layer**: Maps original file paths to content hashes with JSON persistence
+- **Catalog Layer**: Maps original file paths to content hashes using SQLite database
 - **Repository Layer**: Manages the `.cas/` directory structure
 - **Client Layer**: Unified interface for local and remote storage access with thread-safe catalog operations
 - **Command Layer**: User-facing CLI commands (init, add, ls, cat, status, hash, verify, serve)
@@ -236,10 +252,12 @@ Files are stored using a 2-level sharding strategy based on the SHA-256 hash:
 │   └── ab/
 │       └── cd/
 │           └── abcd1234567890...  (full 64-char SHA-256 hash)
-└── catalog.json
+└── catalog.db
 ```
 
-This sharding approach (using the first 4 characters of the hash split into two directory levels) scales to millions of files without filesystem performance degradation.
+- **Blob storage**: 2-level sharding using first 4 hash characters scales to millions of files
+- **Catalog database**: SQLite with WAL mode for concurrent reads and atomic writes
+- **Database features**: Indexed by filepath (primary key) and hash for fast lookups
 
 ## Client Library
 
@@ -636,11 +654,12 @@ mini-CAS/
 - **Write-time deduplication**: Checks for existing blobs before writing to minimize I/O
 - **Atomic writes**: New blobs are written to a temp file first, then renamed to final location
 - **Immutable blobs**: Files stored with 0444 permissions prevent accidental modification
-- **JSON catalog**: Human-readable format simplifies debugging and inspection
+- **SQLite catalog**: WAL mode enables concurrent reads, indexed queries, and ACID guarantees
 - **RESTful API design**: Resource-oriented design following REST principles
 - **Content-based ETags**: SHA-256 hash serves as perfect ETag for HTTP caching
 - **12-factor configuration**: Supports both command-line flags and environment variables
 - **Middleware composition**: Clean separation of cross-cutting concerns (logging, auth, CORS)
+- **Multi-stage Docker builds**: Minimal Alpine-based images with CGO-free builds for portability
 
 ## Local vs Remote Mode
 
@@ -735,6 +754,8 @@ unset CAS_SERVER_URL CAS_AUTH_TOKEN
 
 ## Development
 
+### Building from Source
+
 ```bash
 # Build
 go build -o cas ./cmd/main
@@ -744,9 +765,40 @@ go test ./pkg/...
 
 # Run tests for a specific package
 go test ./pkg/storage
+go test ./pkg/catalog
 go test ./pkg/client
 go test ./pkg/server
 ```
+
+### Docker Development
+
+```bash
+# Build image
+docker-compose build
+
+# Start server with mounted volume
+docker-compose up
+
+# View logs
+docker-compose logs -f
+
+# Stop server
+docker-compose down
+
+# Access container shell
+docker-compose exec cas-server sh
+```
+
+The `docker-compose.yml` mounts `./docker-data` as the repository directory, allowing you to inspect the SQLite database and blobs directly on your host machine.
+
+## Dependencies
+
+Mini-CAS uses the following key dependencies:
+
+- **modernc.org/sqlite v1.44.2**: Pure Go SQLite implementation (no CGO required)
+- **Standard library**: Minimal external dependencies for portability
+
+The pure Go SQLite driver enables CGO-free builds, making the binary fully static and ideal for Docker containers and cross-platform distribution.
 
 ## License
 
