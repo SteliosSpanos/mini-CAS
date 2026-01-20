@@ -197,3 +197,20 @@ func TestOpenBlob(t *testing.T) {
 		t.Errorf("OpenBlob() content = %q, want %q", data, content)
 	}
 }
+
+func TestOpenBlob_NotFound(t *testing.T) {
+	casDir := t.TempDir()
+	os.MkdirAll(filepath.Join(casDir, "storage"), 0755)
+
+	fakeHash := "abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+
+	reader, err := OpenBlob(casDir, fakeHash)
+	if err == nil {
+		t.Error("OpenBlob() expected error, got nil")
+	}
+
+	if reader != nil {
+		reader.Close()
+		t.Error("OpenBlob() should return nil reader on error")
+	}
+}
