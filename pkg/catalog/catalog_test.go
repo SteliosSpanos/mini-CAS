@@ -141,3 +141,42 @@ func TestListEntries(t *testing.T) {
 		}
 	}
 }
+
+func TestListEntries_Empty(t *testing.T) {
+	casDir := t.TempDir()
+	cat := NewCatalog(casDir)
+	defer cat.Close()
+
+	got, err := cat.ListEntries()
+	if err != nil {
+		t.Fatalf("ListEntries() error: %v", err)
+	}
+
+	if len(got) != 0 {
+		t.Errorf("ListEntries() returned %d entries, want 0", len(got))
+	}
+}
+
+func TestFormatSize(t *testing.T) {
+	tests := []struct {
+		name  string
+		bytes uint64
+		want  string
+	}{
+		{name: "zero bytes", bytes: 0, want: "0 B"},
+		{name: "bytes", bytes: 512, want: "512B"},
+		{name: "exactly 1 KB", bytes: 1024, want: "1.00 KB"},
+		{name: "1.5 KB", bytes: 1536, want: "1.50 KB"},
+		{name: "exactly 1 MB", bytes: 1024 * 1024, want: "1.00 MB"},
+		{name: "exactly 1 GB", bytes: 1024 * 1024 * 1024, want: "1.00 GB"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := FormatSize(tt.bytes)
+			if got != tt.want {
+				t.Errorf("FormatSize(%d) = %q, want %q", tt.bytes, got, tt.want)
+			}
+		})
+	}
+}
