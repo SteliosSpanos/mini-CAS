@@ -94,3 +94,50 @@ func TestAddEntry_Upset(t *testing.T) {
 		t.Errorf("ListEntries() = %d entries, want 1", len(entries))
 	}
 }
+
+func TestListEntries(t *testing.T) {
+	casDir := t.TempDir()
+	cat := NewCatalog(casDir)
+	defer cat.Close()
+
+	entries := []Entry{
+		{
+			Filepath: "zebra.txt",
+			Hash:     "aaaa1111aaaa1111aaaa1111aaaa1111aaaa1111aaaa1111aaaa1111aaaa1111",
+			Filesize: 100,
+			ModTime:  time.Now().Truncate(time.Microsecond),
+		},
+		{
+			Filepath: "apple.txt",
+			Hash:     "bbbb2222bbbb2222bbbb2222bbbb2222bbbb2222bbbb2222bbbb2222bbbb2222",
+			Filesize: 200,
+			ModTime:  time.Now().Truncate(time.Microsecond),
+		},
+		{
+			Filepath: "mango.txt",
+			Hash:     "cccc3333cccc3333cccc3333cccc3333cccc3333cccc3333cccc3333cccc3333",
+			Filesize: 300,
+			ModTime:  time.Now().Truncate(time.Microsecond),
+		},
+	}
+
+	for _, entry := range entries {
+		cat.AddEntry(entry)
+	}
+
+	got, err := cat.ListEntries()
+	if err != nil {
+		t.Fatalf("ListEntries() error: %v", err)
+	}
+
+	if len(got) != 3 {
+		t.Fatalf("ListEntries() returned %d entries, want 3", len(got))
+	}
+
+	expectedOrder := []string{"apple.txt", "mango.txt", "zebra.txt"}
+	for i, wantPath := range expectedOrder {
+		if got[i].Filepath != wantPath {
+			t.Errorf("ListEntries()[%d].Filepath = %q, want %q", i, got[i].Filepath, wantPath)
+		}
+	}
+}
