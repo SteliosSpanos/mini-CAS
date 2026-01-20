@@ -214,3 +214,30 @@ func TestOpenBlob_NotFound(t *testing.T) {
 		t.Error("OpenBlob() should return nil reader on error")
 	}
 }
+
+func TestWriteBlobStream_OpenBlob_RoundTrip(t *testing.T) {
+	casDir := t.TempDir()
+	os.MkdirAll(filepath.Join(casDir, "storage"), 0755)
+
+	content := "round-trip streaming content"
+
+	hash, err := WriteBlobStream(casDir, strings.NewReader(content))
+	if err != nil {
+		t.Fatalf("WriteBlobStream() error: %v", err)
+	}
+
+	reader, err := OpenBlob(casDir, hash)
+	if err != nil {
+		t.Fatalf("OpenBlob() error: %v", err)
+	}
+	defer reader.Close()
+
+	data, err := io.ReadAll(reader)
+	if err != nil {
+		t.Fatalf("io.ReadAll() error: %v", err)
+	}
+
+	if string(data) != content {
+		t.Errorf("round-trip content = %q, want %q", data, content)
+	}
+}
