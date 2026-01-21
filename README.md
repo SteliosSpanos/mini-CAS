@@ -752,6 +752,49 @@ kill $SERVER_PID
 unset CAS_SERVER_URL CAS_AUTH_TOKEN
 ```
 
+## Testing
+
+Mini-CAS includes comprehensive test coverage across all packages. Tests use `t.TempDir()` for isolated environments and follow Go testing best practices.
+
+### Running Tests
+
+```bash
+# Run all tests
+go test ./pkg/...
+
+# Run with verbose output
+go test -v ./pkg/...
+
+# Run specific package
+go test ./pkg/objects
+go test ./pkg/storage
+go test ./pkg/catalog
+go test ./pkg/path
+go test ./pkg/client
+go test ./pkg/server
+
+# Run with race detection
+go test -race ./pkg/...
+
+# Coverage report
+go test -cover ./pkg/...
+
+# Generate HTML coverage report
+go test -coverprofile=coverage.out ./pkg/...
+go tool cover -html=coverage.out -o coverage.html
+```
+
+### Test Files
+
+| Package | Test File | What It Tests |
+|---------|-----------|---------------|
+| `pkg/objects` | `blob_test.go` | SHA-256 hashing, empty data, binary data |
+| `pkg/storage` | `storage_test.go` | Blob I/O, streaming, sharding, deduplication |
+| `pkg/catalog` | `catalog_test.go` | SQLite CRUD, JSON serialization, sorting |
+| `pkg/path` | `path_test.go` | Repository init, directory structure |
+| `pkg/client` | `local_test.go` | Upload/download, context, sentinel errors |
+| `pkg/server` | `handlers_test.go` | HTTP handlers, auth, status codes |
+
 ## Development
 
 ### Building from Source
@@ -759,15 +802,6 @@ unset CAS_SERVER_URL CAS_AUTH_TOKEN
 ```bash
 # Build
 go build -o cas ./cmd/main
-
-# Run tests
-go test ./pkg/...
-
-# Run tests for a specific package
-go test ./pkg/storage
-go test ./pkg/catalog
-go test ./pkg/client
-go test ./pkg/server
 ```
 
 ### Docker Development
