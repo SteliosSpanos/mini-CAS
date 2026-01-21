@@ -93,3 +93,28 @@ func TestOpen_NotExists(t *testing.T) {
 		t.Errorf("error should mention 'no CAS repository', got %v", err)
 	}
 }
+
+func TestInit_EmptyPath(t *testing.T) {
+	tempDir := t.TempDir()
+
+	originalDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("os.Getwd() error: %v", err)
+	}
+
+	os.Chdir(tempDir)
+
+	t.Cleanup(func() {
+		os.Chdir(originalDir)
+	})
+
+	repo, err := Init("")
+	if err != nil {
+		t.Fatalf("Init('') error: %v", err)
+	}
+
+	expectedCasDir := filepath.Join(tempDir, CASDir)
+	if repo.RootDir != expectedCasDir {
+		t.Errorf("RootDir = %q, want %q", repo.RootDir, expectedCasDir)
+	}
+}
