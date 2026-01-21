@@ -80,3 +80,16 @@ func TestOpen(t *testing.T) {
 		t.Errorf("RootDir = %q, want %q", repo.RootDir, expectedCasDir)
 	}
 }
+
+func TestOpen_NotExists(t *testing.T) {
+	tempDir := t.TempDir()
+
+	_, err := Open(tempDir)
+	if err == nil {
+		t.Error("Open() should fail for non-existent repository")
+	}
+
+	if !strings.Contains(err.Error(), "no CAS repository") {
+		t.Errorf("error should mention 'no CAS repository', got %v", err)
+	}
+}
