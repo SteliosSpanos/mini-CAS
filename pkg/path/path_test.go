@@ -79,5 +79,4 @@ func TestOpen(t *testing.T) {
 	if repo.RootDir != expectedCasDir {
 		t.Errorf("RootDir = %q, want %q", repo.RootDir, expectedCasDir)
 	}
-
 }
