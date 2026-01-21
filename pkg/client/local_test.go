@@ -8,6 +8,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/SteliosSpanos/mini-CAS/pkg/catalog"
 )
 
 func setupTestClient(t *testing.T) (*LocalClient, string) {
@@ -104,5 +107,74 @@ func TestDownload_BlobNotFound(t *testing.T) {
 
 	if !errors.Is(err, ErrBlobNotFound) {
 		t.Errorf("Download() error = %v, want ErrBlobNotFound", err)
+	}
+}
+
+func TestUpload_ContextCancelled(t *testing.T) {
+	client, _ := setupTestClient(t)
+	defer client.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := client.Upload(ctx, strings.NewReader("data"))
+
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("Upload() error = %v, want context.Canceled", err)
+	}
+}
+
+func TestDownload_ContextCancelled(t *testing.T) {
+	client, _ := setupTestClient(t)
+	defer client.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := client.Download(ctx, validHash())
+
+	if !errors.Is(err, context.Canceled) {
+		t.Errorf("Download() error = %v, want context.Canceled", err)
+	}
+}
+
+func TestAddEntry_GetEntry(t *testing.T) {
+	client, _ := setupTestClient(t)
+	defer client.Close()
+
+	ctx := context.Background()
+	modTime := time.Now().Truncate(time.Microsecond)
+
+	entry := catalog.Entry{
+		Filepath: "test/file.txt",
+		Hash:     validHash(),
+		Filesize: 1024,
+		ModTime:  modTime,
+	}
+
+	if err := client.AddEntry(ctx, entry); err != nil {
+		t.Fatalf("AddEntry() error: %v", err)
+	}
+
+	got, err := client.GetEntry(ctx, "test/file.txt")
+	if err != nil {
+		t.Fatalf("GetEntry() error: %v", err)
+	}
+
+	if got.Hash != entry.Hash {
+		t.Errorf("Hash = %q, want %q", got.Hash, entry.Hash)
+	}
+}
+
+func TestGetEntry_NotFound(t *testing.T) {
+	client, _ := setupTestClient(t)
+	defer client.Close()
+
+	ctx := context.Background()
+
+	_, err := client.GetEntry(ctx, "nonexistent.txt")
+
+	if !errors.Is(err, ErrEntryNotFound) {
+		t.Errorf("GetEntry() error = %v, want ErrEntryNotFound", err)
 	}
 }
