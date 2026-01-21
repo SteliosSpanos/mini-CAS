@@ -1,6 +1,8 @@
 package catalog
 
 import (
+	"bytes"
+	"encoding/json"
 	"testing"
 	"time"
 )
@@ -164,7 +166,7 @@ func TestFormatSize(t *testing.T) {
 		want  string
 	}{
 		{name: "zero bytes", bytes: 0, want: "0 B"},
-		{name: "bytes", bytes: 512, want: "512B"},
+		{name: "bytes", bytes: 512, want: "512 B"},
 		{name: "exactly 1 KB", bytes: 1024, want: "1.00 KB"},
 		{name: "1.5 KB", bytes: 1536, want: "1.50 KB"},
 		{name: "exactly 1 MB", bytes: 1024 * 1024, want: "1.00 MB"},
@@ -178,5 +180,56 @@ func TestFormatSize(t *testing.T) {
 				t.Errorf("FormatSize(%d) = %q, want %q", tt.bytes, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestWriteTo_ReadFrom_RoundTrip(t *testing.T) {
+	casDir1 := t.TempDir()
+	cat1 := NewCatalog(casDir1)
+	defer cat1.Close()
+
+	modTime := time.Now().Truncate(time.Microsecond)
+	entry := Entry{
+		Filepath: "test/file.txt",
+		Hash:     "deadbeef00000000000000000000000000000000000000000000000000000000",
+		Filesize: 42,
+		ModTime:  modTime,
+	}
+	cat1.AddEntry(entry)
+
+	var buf bytes.Buffer
+	n, err := cat1.WriteTo(&buf)
+	if err != nil {
+		t.Fatalf("WriteTo() error: %v", err)
+	}
+
+	if n == 0 {
+		t.Error("WriteTo() wrote 0 bytes")
+	}
+
+	if !json.Valid(buf.Bytes()) {
+		t.Error("WriteTo() did not produce valid JSON")
+	}
+
+	casDir2 := t.TempDir()
+	cat2 := NewCatalog(casDir2)
+	defer cat2.Close()
+
+	_, err = cat2.ReadFrom(bytes.NewReader(buf.Bytes()))
+	if err != nil {
+		t.Fatalf("ReadFrom() error: %v", err)
+	}
+
+	got, err := cat2.GetEntry("test/file.txt")
+	if err != nil {
+		t.Fatalf("GetEntry() error: %v", err)
+	}
+
+	if got.Hash != entry.Hash {
+		t.Errorf("Hash = %q, want %q", got.Hash, entry.Hash)
+	}
+
+	if got.Filesize != entry.Filesize {
+		t.Errorf("Filesize = %q, want %q", got.Filesize, entry.Filesize)
 	}
 }
