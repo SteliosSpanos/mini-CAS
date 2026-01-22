@@ -804,6 +804,34 @@ go tool cover -html=coverage.out -o coverage.html
 go build -o cas ./cmd/main
 ```
 
+### Makefile Commands
+
+Mini-CAS includes a Makefile for streamlined development workflows. All commands are available at the project root:
+
+```bash
+# Building
+make build          # Build binary to ./bin/cas
+make clean          # Remove ./bin, coverage.out, coverage.html
+
+# Running
+make run            # Run with go run (no build)
+make serve          # Build and start HTTP server
+
+# Testing
+make test           # Run all tests
+make test-v         # Verbose test output
+make test-race      # Tests with race detector
+make test-cover     # Generate HTML coverage report (coverage.html)
+
+# Code Quality
+make fmt            # Format code with gofmt
+make vet            # Static analysis with go vet
+make check          # Run both fmt and vet
+
+# Help
+make help           # Show all available commands
+```
+
 ### Docker Development
 
 ```bash
