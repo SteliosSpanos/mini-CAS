@@ -8,24 +8,20 @@ Content-addressable storage eliminates duplicate files automatically by storing 
 
 ## Features
 
-- **Automatic deduplication**: Identical files are stored only once
-- **Content-based addressing**: Files are stored by their SHA-256 hash
-- **Memory-efficient streaming**: Large files are processed without loading entirely into memory
-- **Interface-based design**: Follows Go best practices using `io.Reader`/`io.Writer` for flexibility and testability
-- **Efficient sharding**: 2-level directory sharding prevents filesystem performance degradation
-- **Immutable storage**: Blobs are write-once, read-many with enforced permissions
-- **SQLite catalog**: Fast, reliable SQLite database with WAL mode for concurrent access
-- **Directory support**: Add entire directory trees with a single command
+- **Automatic deduplication**: Identical files stored only once by SHA-256 hash
+- **Memory-efficient streaming**: Large files processed without loading into memory
+- **Interface-based design**: Go best practices with `io.Reader`/`io.Writer`
+- **Efficient sharding**: 2-level directory sharding prevents filesystem bottlenecks
+- **Immutable storage**: Write-once, read-many blobs with enforced permissions
+- **SQLite catalog**: WAL mode for concurrent access with ACID guarantees
+- **Directory support**: Add entire directory trees with single command
 - **Integrity verification**: Verify stored content against catalog hashes
-- **RESTful HTTP API**: Production-ready HTTP server with streaming endpoints
-- **ETag caching**: Content-based ETags enable perfect HTTP caching
-- **Graceful shutdown**: Handles SIGTERM/SIGINT signals properly
-- **Flexible configuration**: Command-line flags and environment variables support
-- **Location transparency**: Unified client interface for local and remote storage access
-- **Remote operation**: All CLI commands work seamlessly with remote servers via HTTP
-- **Thread-safe access**: Safe concurrent operations with read-write mutex protection
-- **Docker support**: Multi-stage Docker builds with compose configuration for easy deployment
-- **Merkle tree support**: Build Merkle trees, generate and verify cryptographic proofs for data integrity
+- **RESTful HTTP API**: Production-ready server with streaming endpoints
+- **Content-based caching**: ETags derived from hashes enable perfect HTTP caching
+- **Location transparency**: Unified interface for local and remote storage
+- **Thread-safe access**: Safe concurrent operations
+- **Docker support**: Multi-stage builds with compose configuration
+- **Merkle tree support**: Cryptographic proofs for data integrity
 
 ## Installation
 
@@ -119,7 +115,7 @@ Add files or directories to the storage.
 ./cas add /path/to/directory
 ```
 
-When adding directories, Mini-CAS automatically skips the `.cas/` directory to avoid recursion. Each file added displays its short hash (first 8 characters). Files are processed using streaming I/O to handle large files efficiently without loading them entirely into memory.
+When adding directories, Mini-CAS automatically skips the `.cas/` directory to avoid recursion. Each file added displays its short hash (first 8 characters).
 
 ### ls
 
@@ -139,7 +135,7 @@ Retrieve and display file contents from storage.
 ./cas cat <filepath>
 ```
 
-Retrieves file content based on the catalog entry using streaming I/O. Supports piping to other commands:
+Retrieves file content based on the catalog entry. Supports piping to other commands:
 
 ```bash
 ./cas cat config.json | jq .
@@ -213,7 +209,7 @@ export CAS_CORS_ORIGINS="https://app.example.com,https://cdn.example.com"
 ./cas serve
 ```
 
-The server runs until interrupted with SIGINT (Ctrl+C) or SIGTERM, performing graceful shutdown with a 30-second timeout.
+The server performs graceful shutdown with a 30-second timeout when interrupted.
 
 ## Architecture
 
@@ -237,12 +233,12 @@ Mini-CAS is built with a layered architecture:
 
 - **Objects Layer**: Defines the `Blob` type and SHA-256 hashing
 - **Merkle Layer**: Builds Merkle trees, generates and verifies cryptographic proofs
-- **Storage Layer**: Manages physical blob storage with 2-level sharding and streaming I/O
+- **Storage Layer**: Manages physical blob storage with 2-level sharding
 - **Catalog Layer**: Maps original file paths to content hashes using SQLite database
 - **Repository Layer**: Manages the `.cas/` directory structure
-- **Client Layer**: Unified interface for local and remote storage access with thread-safe catalog operations
+- **Client Layer**: Unified interface for local and remote storage access
 - **Command Layer**: User-facing CLI commands (init, add, ls, cat, status, hash, verify, serve)
-- **HTTP Server**: RESTful API with streaming endpoints, middleware chain, and graceful shutdown
+- **HTTP Server**: RESTful API with middleware chain
 
 ## Merkle Trees
 
@@ -311,8 +307,7 @@ Files are stored using a 2-level sharding strategy based on the SHA-256 hash:
 ```
 
 - **Blob storage**: 2-level sharding using first 4 hash characters scales to millions of files
-- **Catalog database**: SQLite with WAL mode for concurrent reads and atomic writes
-- **Database features**: Indexed by filepath (primary key) and hash for fast lookups
+- **Catalog database**: SQLite with WAL mode, indexed by filepath (primary key) and hash
 
 ## Client Library
 
@@ -332,7 +327,7 @@ type Client interface {
 
 ### Local Client
 
-The `LocalClient` provides direct access to a local CAS repository with zero overhead. It wraps the existing storage and catalog packages with thread-safe access using `sync.RWMutex`.
+The `LocalClient` provides direct access to a local CAS repository with zero overhead and thread-safe operations.
 
 **Example usage:**
 
@@ -368,7 +363,7 @@ entries, err := client.GetCatalog(context.Background())
 
 ### HTTP Client
 
-The `HTTPClient` provides remote access to a CAS repository via the HTTP API. It handles authentication, connection pooling, and proper error handling. All blob and catalog operations are fully implemented.
+The `HTTPClient` provides remote access to a CAS repository via the HTTP API with authentication and connection pooling.
 
 **Example usage:**
 
@@ -430,38 +425,22 @@ client, err := client.NewClient(cfg)
 **2. Environment variables (12-factor):**
 
 ```go
-// Reads from environment:
-// - CAS_SERVER_URL: HTTP server URL (e.g., "http://localhost:8080")
-// - CAS_AUTH_TOKEN: Bearer token for authentication
-// - CAS_DIR: Local CAS directory (defaults to ".cas")
+// Reads from CAS_SERVER_URL, CAS_AUTH_TOKEN, CAS_DIR
 client, err := client.NewClientFromEnv()
 ```
 
-The factory automatically selects the appropriate client type:
-- If `ServerURL` is set, creates an `HTTPClient`
-- Otherwise, creates a `LocalClient` with the specified `CASDir`
+The factory automatically selects `HTTPClient` if `CAS_SERVER_URL` is set, otherwise `LocalClient`.
 
 ### Environment Variables
 
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `CAS_SERVER_URL` | HTTP server URL for remote access | (empty, uses local) |
-| `CAS_AUTH_TOKEN` | Bearer token for HTTP authentication | (empty, no auth) |
+| `CAS_AUTH_TOKEN` | Bearer token for authentication | (empty, no auth) |
 | `CAS_DIR` | Local CAS repository directory | `.cas` |
-
-**Example:**
-
-```bash
-# Use remote server
-export CAS_SERVER_URL=http://cas.example.com:8080
-export CAS_AUTH_TOKEN=production-secret
-
-# Use local repository
-export CAS_DIR=/var/lib/cas
-
-# Your application automatically uses the correct client
-./my-cas-application
-```
+| `CAS_PORT` | Server port | `8080` |
+| `CAS_HOST` | Server bind address | `0.0.0.0` |
+| `CAS_CORS_ORIGINS` | Comma-separated CORS origins | `*` |
 
 ### Error Handling
 
@@ -514,7 +493,7 @@ reader, err := client.Download(ctx, hash)
 
 ## HTTP API Server
 
-Mini-CAS includes a production-ready HTTP server that exposes the storage system via a RESTful API. The server uses streaming I/O for all blob operations, ensuring constant memory usage regardless of file size.
+Mini-CAS includes a production-ready HTTP server that exposes the storage system via a RESTful API.
 
 ### API Endpoints
 
@@ -531,27 +510,11 @@ Mini-CAS includes a production-ready HTTP server that exposes the storage system
 
 ### Configuration
 
-The server can be configured via command-line flags or environment variables:
+Configure via command-line flags or environment variables (see Environment Variables section):
 
 ```bash
-# Command-line flags
-./cas serve --port 8080 --host 0.0.0.0 --auth-token secret123 --cors-origins "*"
-
-# Environment variables (12-factor compatible)
-export CAS_PORT=8080
-export CAS_HOST=0.0.0.0
-export CAS_AUTH_TOKEN=secret123
-export CAS_CORS_ORIGINS="https://app.example.com,https://cdn.example.com"
-./cas serve
+./cas serve --port 8080 --auth-token secret123 --cors-origins "*"
 ```
-
-**Default values:**
-- Port: 8080
-- Host: 0.0.0.0 (all interfaces)
-- Auth Token: none (optional, only required for POST operations)
-- CORS Origins: * (all origins allowed)
-- Read Timeout: 30 seconds
-- Write Timeout: 30 seconds
 
 ### Usage Examples
 
@@ -636,15 +599,12 @@ curl -X POST http://localhost:8080/catalog \
 
 ### API Features
 
-- **Streaming I/O**: All blob operations use streaming, supporting arbitrarily large files with constant memory usage
-- **Content-based ETags**: The blob's SHA-256 hash IS the ETag, enabling perfect HTTP caching
-- **Immutable caching**: Blobs get `Cache-Control: public, max-age=31536000, immutable` headers
-- **Authentication**: Bearer token authentication for write operations (POST), reads are public
-- **CORS support**: Configurable CORS origins for browser-based applications
-- **Graceful shutdown**: Handles SIGTERM/SIGINT with 30-second graceful shutdown timeout
-- **Structured logging**: Request logging with method, path, status code, and duration
-- **Panic recovery**: Recovery middleware catches panics and returns 500 errors
-- **Standard errors**: JSON error responses with consistent structure
+- **Streaming I/O**: Constant memory usage regardless of file size
+- **Content-based ETags**: SHA-256 hash serves as ETag with immutable caching headers
+- **Authentication**: Bearer token required for write operations (POST), reads are public
+- **CORS support**: Configurable origins for browser applications
+- **Structured logging**: Request method, path, status code, and duration
+- **Panic recovery**: Middleware catches panics and returns 500 errors
 
 ### Middleware Chain
 
@@ -657,14 +617,13 @@ The server applies middleware in the following order:
 
 ### Security Considerations
 
-- Authentication is optional but recommended for production deployments
-- Read operations (GET, HEAD) are always public
-- Write operations (POST) require Bearer token authentication if configured
+- Authentication optional but recommended for production
+- Write operations (POST) require Bearer token if configured
 - CORS can be restricted to specific origins
-- Catalog write operations (POST /catalog) validate that blobs exist before accepting entries
-- Path traversal is prevented in catalog entries
-- Blobs are immutable and stored with read-only permissions
-- All hash inputs are validated (must be 64 hex characters)
+- Catalog writes validate blob existence
+- Path traversal prevented in catalog entries
+- Blobs stored with read-only permissions (0444)
+- Hash inputs validated (64 hex characters)
 
 ## Project Structure
 
@@ -708,18 +667,17 @@ mini-CAS/
 
 ## Design Decisions
 
-- **SHA-256 hashing**: Cryptographically secure hash function with excellent collision resistance
-- **Go interface patterns**: Follows idiomatic Go design by accepting `io.Reader`/`io.Writer` interfaces rather than concrete types, enabling composition, testing without filesystem, and future extensibility
-- **Streaming I/O**: Files are processed using `io.Copy` and `io.MultiWriter` to handle large files without excessive memory usage
-- **Write-time deduplication**: Checks for existing blobs before writing to minimize I/O
-- **Atomic writes**: New blobs are written to a temp file first, then renamed to final location
-- **Immutable blobs**: Files stored with 0444 permissions prevent accidental modification
-- **SQLite catalog**: WAL mode enables concurrent reads, indexed queries, and ACID guarantees
-- **RESTful API design**: Resource-oriented design following REST principles
-- **Content-based ETags**: SHA-256 hash serves as perfect ETag for HTTP caching
-- **12-factor configuration**: Supports both command-line flags and environment variables
-- **Middleware composition**: Clean separation of cross-cutting concerns (logging, auth, CORS)
-- **Multi-stage Docker builds**: Minimal Alpine-based images with CGO-free builds for portability
+- **SHA-256 hashing**: Cryptographically secure with excellent collision resistance
+- **Go interface patterns**: Accepts `io.Reader`/`io.Writer` for composition and testability
+- **Streaming I/O**: Uses `io.Copy` and `io.MultiWriter` for memory efficiency
+- **Write-time deduplication**: Checks existing blobs before writing
+- **Atomic writes**: Temp file then rename to final location
+- **Immutable blobs**: 0444 permissions prevent modification
+- **SQLite catalog**: WAL mode for concurrent reads with ACID guarantees
+- **RESTful API design**: Resource-oriented following REST principles
+- **12-factor configuration**: Command-line flags and environment variables
+- **Middleware composition**: Separation of cross-cutting concerns
+- **Multi-stage Docker builds**: Minimal Alpine-based images, CGO-free
 
 ## Local vs Remote Mode
 
@@ -736,10 +694,7 @@ When no environment variables are set, Mini-CAS operates in local mode, accessin
 ./cas ls
 ```
 
-The client uses `LocalClient` which provides:
-- Zero-overhead direct access to storage and catalog
-- Thread-safe concurrent operations with `sync.RWMutex`
-- Immediate catalog persistence
+The client uses `LocalClient` which provides zero-overhead direct access with thread-safe operations.
 
 ### Remote Mode
 
@@ -760,11 +715,7 @@ export CAS_AUTH_TOKEN=mysecret
 ./cas verify              # Verifies against server storage
 ```
 
-The client uses `HTTPClient` which provides:
-- HTTP connection pooling for performance
-- Automatic authentication with Bearer tokens
-- Streaming uploads and downloads
-- Proper error handling with HTTP status codes
+The client uses `HTTPClient` which provides connection pooling, automatic authentication, and streaming operations.
 
 ### Command Behavior Differences
 
