@@ -25,6 +25,7 @@ Content-addressable storage eliminates duplicate files automatically by storing 
 - **Remote operation**: All CLI commands work seamlessly with remote servers via HTTP
 - **Thread-safe access**: Safe concurrent operations with read-write mutex protection
 - **Docker support**: Multi-stage Docker builds with compose configuration for easy deployment
+- **Merkle tree support**: Build Merkle trees, generate and verify cryptographic proofs for data integrity
 
 ## Installation
 
@@ -230,17 +231,71 @@ Mini-CAS is built with a layered architecture:
 +-------------------------------------+
 |          Storage Layer              |  Physical blob storage with sharding
 +-------------------------------------+
-|          Objects Layer              |  Blob types and SHA-256 hashing
+|   Objects Layer   |  Merkle Layer   |  Hashing and Merkle trees
 +-------------------------------------+
 ```
 
 - **Objects Layer**: Defines the `Blob` type and SHA-256 hashing
+- **Merkle Layer**: Builds Merkle trees, generates and verifies cryptographic proofs
 - **Storage Layer**: Manages physical blob storage with 2-level sharding and streaming I/O
 - **Catalog Layer**: Maps original file paths to content hashes using SQLite database
 - **Repository Layer**: Manages the `.cas/` directory structure
 - **Client Layer**: Unified interface for local and remote storage access with thread-safe catalog operations
 - **Command Layer**: User-facing CLI commands (init, add, ls, cat, status, hash, verify, serve)
 - **HTTP Server**: RESTful API with streaming endpoints, middleware chain, and graceful shutdown
+
+## Merkle Trees
+
+Mini-CAS includes a Merkle tree implementation for verifying data integrity through cryptographic proofs. Merkle trees are binary hash trees where each leaf node represents a data hash, and each internal node is the hash of its children. This structure enables efficient verification that specific data exists in a larger dataset without transmitting the entire dataset.
+
+### Features
+
+- **Flexible hash functions**: Use any hash function (SHA-256, Blake3, etc.)
+- **Automatic balancing**: Handles odd leaf counts by duplicating the last leaf
+- **Proof generation**: Generate compact membership proofs for any leaf
+- **Independent verification**: Verify proofs without rebuilding the entire tree
+- **Integration with CAS**: Uses `objects.Hash` for consistent hashing
+
+### Basic Usage
+
+```go
+import (
+    "github.com/SteliosSpanos/mini-CAS/pkg/merkle"
+    "github.com/SteliosSpanos/mini-CAS/pkg/objects"
+)
+
+// Create tree with SHA-256 hash function
+tree := merkle.NewTree(objects.Hash)
+
+// Build tree from blob hashes
+leafHashes := []string{
+    "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b",
+    "d4735e3a265e16eee03f59718b9b5d03019c07d8b6c51f90da3a666eec13ab35",
+}
+err := tree.Build(leafHashes)
+
+// Get the Merkle root
+root, err := tree.RootHash()
+fmt.Printf("Merkle root: %s\n", root)
+
+// Generate proof for leaf at index 1
+proof, err := tree.GenerateProof(1)
+
+// Verify the proof independently
+isValid := proof.Verify(objects.Hash)
+fmt.Printf("Proof valid: %v\n", isValid)
+```
+
+### Proof Structure
+
+A Merkle proof contains:
+- **LeafHash**: The hash of the data being proven
+- **LeafIndex**: Position of the leaf in the tree
+- **Siblings**: Hashes needed to reconstruct the path to the root
+- **RootHash**: Expected root hash for verification
+
+Proofs are compact (log₂N sibling hashes) and can be verified independently without access to the original tree or dataset.
 
 ## Storage Structure
 
@@ -628,6 +683,11 @@ mini-CAS/
 │   └── serve.go        # HTTP API server command
 ├── pkg/
 │   ├── objects/        # Blob types and hashing
+│   ├── merkle/         # Merkle tree implementation
+│   │   ├── errors.go   # Error definitions
+│   │   ├── node.go     # Node type and hash functions
+│   │   ├── tree.go     # Tree building
+│   │   └── proof.go    # Proof generation and verification
 │   ├── storage/        # Physical storage management
 │   ├── catalog/        # Path-to-hash mapping
 │   ├── path/           # Repository initialization
@@ -789,6 +849,7 @@ go tool cover -html=coverage.out -o coverage.html
 | Package | Test File | What It Tests |
 |---------|-----------|---------------|
 | `pkg/objects` | `blob_test.go` | SHA-256 hashing, empty data, binary data |
+| `pkg/merkle` | `merkle_test.go` | Tree building, proof generation, verification |
 | `pkg/storage` | `storage_test.go` | Blob I/O, streaming, sharding, deduplication |
 | `pkg/catalog` | `catalog_test.go` | SQLite CRUD, JSON serialization, sorting |
 | `pkg/path` | `path_test.go` | Repository init, directory structure |
