@@ -28,7 +28,7 @@ func (t *Tree) Build(leafHashes []string) error {
 		t.Leaves[i] = node
 	}
 
-	if len(currentLevel) > 1 {
+	for len(currentLevel) > 1 {
 		if len(currentLevel)%2 == 1 {
 			currentLevel = append(currentLevel, currentLevel[len(currentLevel)-1])
 		}
@@ -52,4 +52,8 @@ func (t *Tree) RootHash() (string, error) {
 		return "", ErrTreeNotBuilt
 	}
 	return t.Root.Hash, nil
+}
+
+func (t *Tree) LeafCount() int {
+	return len(t.Leaves)
 }
