@@ -53,7 +53,3 @@ func (t *Tree) RootHash() (string, error) {
 	}
 	return t.Root.Hash, nil
 }
-
-func (t *Tree) LeafCount() int {
-	return len(t.Leaves)
-}

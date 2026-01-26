@@ -50,3 +50,19 @@ func (t *Tree) GenerateProof(index int) (*Proof, error) {
 		RootHash:  t.Root.Hash,
 	}, nil
 }
+
+func (p *Proof) Verify(hashFunc func([]byte) string) bool {
+	currentHash := p.LeafHash
+	currentIndex := p.LeafIndex
+
+	for _, sibling := range p.Siblings {
+		if currentIndex%2 == 0 {
+			currentHash = hashPair(currentHash, sibling, hashFunc)
+		} else {
+			currentHash = hashPair(sibling, currentHash, hashFunc)
+		}
+		currentIndex = currentIndex / 2
+	}
+
+	return currentHash == p.RootHash
+}
