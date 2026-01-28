@@ -192,6 +192,8 @@ Options:
 - `--host`: Bind address (default: 0.0.0.0, env: CAS_HOST)
 - `--auth-token`: Bearer token for write operations (optional, env: CAS_AUTH_TOKEN)
 - `--cors-origins`: Comma-separated CORS origins (default: *, env: CAS_CORS_ORIGINS)
+- `--tls-cert`: TLS certificate file path (optional, env: CAS_TLS_CERT)
+- `--tls-key`: TLS private key file path (optional, env: CAS_TLS_KEY)
 
 Examples:
 
@@ -202,10 +204,20 @@ Examples:
 # Start on custom port with authentication
 ./cas serve --port 3000 --auth-token mysecret
 
+# Start with TLS encryption (HTTPS)
+./cas serve --port 8443 --tls-cert server.crt --tls-key server.key
+
 # Using environment variables
 export CAS_PORT=8080
 export CAS_AUTH_TOKEN=production-secret-token
 export CAS_CORS_ORIGINS="https://app.example.com,https://cdn.example.com"
+./cas serve
+
+# Production HTTPS server with authentication
+export CAS_PORT=8443
+export CAS_TLS_CERT=/etc/ssl/certs/cas-server.crt
+export CAS_TLS_KEY=/etc/ssl/private/cas-server.key
+export CAS_AUTH_TOKEN=production-secret-token
 ./cas serve
 ```
 
@@ -441,6 +453,8 @@ The factory automatically selects `HTTPClient` if `CAS_SERVER_URL` is set, other
 | `CAS_PORT` | Server port | `8080` |
 | `CAS_HOST` | Server bind address | `0.0.0.0` |
 | `CAS_CORS_ORIGINS` | Comma-separated CORS origins | `*` |
+| `CAS_TLS_CERT` | TLS certificate file path | (empty, HTTP mode) |
+| `CAS_TLS_KEY` | TLS private key file path | (empty, HTTP mode) |
 
 ### Error Handling
 
@@ -618,6 +632,7 @@ The server applies middleware in the following order:
 ### Security Considerations
 
 - Authentication optional but recommended for production
+- TLS support for encrypted connections (use `--tls-cert` and `--tls-key` flags)
 - Write operations (POST) require Bearer token if configured
 - CORS can be restricted to specific origins
 - Catalog writes validate blob existence
