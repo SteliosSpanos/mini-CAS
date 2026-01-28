@@ -83,7 +83,7 @@ func TestHandleGetBlob_InvalidHash(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodGet, "/blob/"+tc.hash, nil)
+			req := httptest.NewRequest(http.MethodGet, "/blobs/"+tc.hash, nil)
 			req.SetPathValue("hash", tc.hash)
 			rec := httptest.NewRecorder()
 
@@ -100,7 +100,7 @@ func TestHandleGetBlob_NotFound(t *testing.T) {
 	server := setupTestServer(t)
 
 	hash := validTestHash()
-	req := httptest.NewRequest(http.MethodGet, "/blob/"+hash, nil)
+	req := httptest.NewRequest(http.MethodGet, "/blobs/"+hash, nil)
 	req.SetPathValue("hash", hash)
 	rec := httptest.NewRecorder()
 
@@ -151,7 +151,7 @@ func TestHandleGetBlob_Success(t *testing.T) {
 		t.Fatalf("failed to write blob: %v", err)
 	}
 
-	req := httptest.NewRequest(http.MethodGet, "/blob/"+hash, nil)
+	req := httptest.NewRequest(http.MethodGet, "/blobs/"+hash, nil)
 	req.SetPathValue("hash", hash)
 	rec := httptest.NewRecorder()
 
