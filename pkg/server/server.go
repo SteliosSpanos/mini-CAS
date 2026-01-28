@@ -67,7 +67,7 @@ func (s *Server) Start(ctx context.Context) error {
 
 	errChan := make(chan error, 1)
 	go func() {
-		if err := s.httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := s.httpServer.ListenAndServeTLS("cert.pem", "key.pem"); err != nil && err != http.ErrServerClosed {
 			errChan <- err
 		}
 	}()
