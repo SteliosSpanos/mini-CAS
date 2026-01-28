@@ -514,9 +514,9 @@ Mini-CAS includes a production-ready HTTP server that exposes the storage system
 | Endpoint | Method | Auth Required | Description |
 |----------|--------|---------------|-------------|
 | `/health` | GET | No | Health check with repository statistics |
-| `/blob/{hash}` | GET | No | Download blob by hash (streaming) |
-| `/blob/{hash}` | HEAD | No | Check if blob exists (no body) |
-| `/blob/{hash}/stat` | GET | No | Get blob metadata (hash, size, exists) |
+| `/blobs/{hash}` | GET | No | Download blob by hash (streaming) |
+| `/blobs/{hash}` | HEAD | No | Check if blob exists (no body) |
+| `/blobs/{hash}/stat` | GET | No | Get blob metadata (hash, size, exists) |
 | `/catalog` | GET | No | Get full catalog as JSON |
 | `/catalog?filepath=path` | GET | No | Get single catalog entry by filepath |
 | `/blobs` | POST | Yes | Upload blob (streaming, returns hash) |
@@ -540,13 +540,13 @@ curl http://localhost:8080/health
 
 **Download a blob:**
 ```bash
-curl http://localhost:8080/blob/e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+curl http://localhost:8080/blobs/e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
 # (blob content streamed to stdout)
 ```
 
 **Check if blob exists (HEAD request):**
 ```bash
-curl -I http://localhost:8080/blob/e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+curl -I http://localhost:8080/blobs/e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
 # HTTP/1.1 200 OK
 # Content-Type: application/octet-stream
 # ETag: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
@@ -555,7 +555,7 @@ curl -I http://localhost:8080/blob/e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b9
 
 **Get blob metadata:**
 ```bash
-curl http://localhost:8080/blob/e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855/stat
+curl http://localhost:8080/blobs/e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855/stat
 # {"hash":"e3b0c44...","size":1024,"exists":true}
 ```
 
