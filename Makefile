@@ -38,6 +38,9 @@ check: fmt vet
 serve: build
 	$(BUILD_DIR)/$(BINARY_NAME) serve
 
+serve-tls: build
+	$(BUILD_DIR)/$(BINARY_NAME) serve --tls-cert cert.pem --tls-key key.pem
+
 help:                                                                    
 	@echo "  build       Build the binary"                                                  
 	@echo "  run         Run with go run"                                                   
@@ -49,5 +52,6 @@ help:
 	@echo "  fmt         Format code"                                                       
 	@echo "  vet         Static analysis"                                                   
 	@echo "  check       Run fmt + vet"                                                     
-	@echo "  serve       Build and start server"                                                                                       
+	@echo "  serve       Build and start HTTP server"     
+	@echo "  serve-tls   Build and start HTTPS server"                                                                              
 	@echo "  help        Show this help"
