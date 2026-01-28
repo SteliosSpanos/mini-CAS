@@ -20,6 +20,12 @@ type Config struct {
 	ReadTimeout  time.Duration
 	WriteTimeout time.Duration
 	RepoPath     string
+	TLSCert      string
+	TLSKey       string
+}
+
+func (c Config) TLSEnabled() bool {
+	return c.TLSCert != "" && c.TLSKey != ""
 }
 
 type Server struct {
@@ -63,11 +69,22 @@ func (s *Server) Start(ctx context.Context) error {
 		WriteTimeout: s.config.WriteTimeout,
 	}
 
-	s.logger.Printf("Starting server on %s:%d", s.config.Host, s.config.Port)
+	if s.config.TLSEnabled() {
+		s.logger.Printf("Starting HTTPS server on %s:%d", s.config.Host, s.config.Port)
+	} else {
+		s.logger.Printf("Starting HTTP server on %s:%d", s.config.Host, s.config.Port)
+	}
 
 	errChan := make(chan error, 1)
 	go func() {
-		if err := s.httpServer.ListenAndServeTLS("cert.pem", "key.pem"); err != nil && err != http.ErrServerClosed {
+		var err error
+		if s.config.TLSEnabled() {
+			err = s.httpServer.ListenAndServeTLS(s.config.TLSCert, s.config.TLSKey)
+		} else {
+			err = s.httpServer.ListenAndServe()
+		}
+
+		if err != nil && err != http.ErrServerClosed {
 			errChan <- err
 		}
 	}()
