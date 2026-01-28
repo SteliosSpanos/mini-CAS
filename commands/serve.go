@@ -21,6 +21,8 @@ func Serve(args []string) {
 	host := fs.String("host", getEnv("CAS_HOST", "0.0.0.0"), "Bind address")
 	authToken := fs.String("auth-token", getEnv("CAS_AUTH_TOKEN", ""), "Bearer token for write operations (optional)")
 	corsOrigins := fs.String("cors-origins", getEnv("CAS_CORS_ORIGINS", "*"), "Comma-seperated CORS origins")
+	tlsCert := fs.String("tls-cert", getEnv("CAS_TLS_CERT", ""), "Path to TLS certificate file")
+	tlsKey := fs.String("tls-key", getEnv("CAS_TLS_KEY", ""), "Path to TLS private key file")
 
 	fs.Parse(args)
 
@@ -32,6 +34,8 @@ func Serve(args []string) {
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 30 * time.Second,
 		RepoPath:     ".",
+		TLSCert:      *tlsCert,
+		TLSKey:       *tlsKey,
 	}
 
 	srv, err := server.NewServer(config)
