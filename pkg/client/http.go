@@ -79,7 +79,7 @@ func (c *HTTPClient) Download(ctx context.Context, hash string) (io.ReadCloser, 
 		return nil, ErrInvalidHash
 	}
 
-	url := fmt.Sprintf("%s/blob/%s", c.baseURL, hash)
+	url := fmt.Sprintf("%s/blobs/%s", c.baseURL, hash)
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
@@ -114,7 +114,7 @@ func (c *HTTPClient) Stat(ctx context.Context, hash string) (BlobInfo, error) {
 		return BlobInfo{}, ErrInvalidHash
 	}
 
-	url := fmt.Sprintf("%s/blob/%s/stat", c.baseURL, hash)
+	url := fmt.Sprintf("%s/blobs/%s/stat", c.baseURL, hash)
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
@@ -158,7 +158,7 @@ func (c *HTTPClient) Exists(ctx context.Context, hash string) (bool, error) {
 		return false, ErrInvalidHash
 	}
 
-	url := fmt.Sprintf("%s/blob/%s", c.baseURL, hash)
+	url := fmt.Sprintf("%s/blobs/%s", c.baseURL, hash)
 
 	req, err := http.NewRequestWithContext(ctx, "HEAD", url, nil)
 	if err != nil {
